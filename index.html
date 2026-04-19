@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'">
+  <title>Swarmnero</title>
+  <link rel="stylesheet" href="./styles/main.css">
+</head>
+<body>
+  <!-- Desktop App Chrome -->
+  <div class="app-titlebar">
+    <span class="app-titlebar-name">Swarmnero</span>
+  </div>
+  <div class="app-menubar">
+    <div class="menu-item">
+      <span class="menu-label">File</span>
+      <div class="menu-dropdown">
+        <div class="menu-option" id="menuNewPost">New Post</div>
+        <div class="menu-option" id="menuLogout">Logout</div>
+      </div>
+    </div>
+    <div class="menu-item">
+      <span class="menu-label">View</span>
+      <div class="menu-dropdown">
+        <div class="menu-option" id="menuTimeline">Timeline</div>
+        <div class="menu-option" id="menuProfile">Profile</div>
+        <div class="menu-option" id="menuFollowing">Following</div>
+        <div class="menu-option" id="menuMessages">Messages</div>
+      </div>
+    </div>
+    <div class="menu-item">
+      <span class="menu-label">Wallet</span>
+      <div class="menu-dropdown">
+        <div class="menu-option" id="menuWallet">Open Wallet</div>
+      </div>
+    </div>
+    <div class="menu-item">
+      <span class="menu-label">Help</span>
+      <div class="menu-dropdown">
+        <div class="menu-option" id="menuGettingStarted">Getting Started</div>
+        <div class="menu-option" id="menuTippingGuide">Tipping Guide</div>
+        <div class="menu-divider"></div>
+        <div class="menu-option" id="menuAbout">About Swarmnero</div>
+      </div>
+    </div>
+    <button class="menubar-close-btn" id="menuClose">Close</button>
+  </div>
+
+  <div class="container">
+    <header>
+      <div class="logo">
+        <img src="./logo.png" alt="Swarmnero" class="logo-img">
+        <span class="version">v0.8.13</span>
+      </div>
+      <div class="user-info">
+        <span id="headerSyncStatus" class="header-sync-status hidden" title="Feed backup status"></span>
+        <span class="status connecting" id="status"></span>
+        <span class="header-peer-count" id="headerPeerCount">0</span>
+        <div class="account-dropdown" id="accountDropdown">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </header>
+
+    <div class="app-layout" id="appLayout">
+      <!-- Left Column -->
+      <aside class="left-column">
+        <nav class="nav-buttons main-nav">
+          <button id="createPostBtn" class="nav-btn nav-btn-primary"><span class="nav-icon">✏</span> Create Post</button>
+          <button id="notificationsNavBtn" class="nav-btn nav-btn-compact nav-btn-priority" data-view="notifications">
+            <span class="nav-icon">🔔</span> Notifications
+            <span id="notificationsBadge" class="badge hidden">0</span>
+          </button>
+          <button id="messagesNavBtn" class="nav-btn nav-btn-compact nav-btn-priority" data-view="messages">
+            <span class="nav-icon">💬</span> Messages
+            <span id="messagesBadge" class="badge hidden">0</span>
+          </button>
+          <div class="nav-divider"></div>
+          <button id="feedNavBtn" class="nav-btn nav-btn-compact"><span class="nav-icon">🏠</span> Feed</button>
+          <button id="walletNavBtn" class="nav-btn nav-btn-compact"><span class="nav-icon">💰</span> Wallet</button>
+          <button class="nav-btn nav-btn-compact" data-view="profile"><span class="nav-icon">👤</span> Profile</button>
+          <button class="nav-btn nav-btn-compact" data-view="discovery"><span class="nav-icon">🔍</span> Discover</button>
+          <button class="nav-btn nav-btn-compact" data-view="search"><span class="nav-icon">🔎</span> Search</button>
+          <button class="nav-btn nav-btn-compact" data-view="trending"><span class="nav-icon">📈</span> Trending</button>
+          <div class="nav-divider"></div>
+          <button class="nav-btn nav-btn-compact nav-btn-secondary" data-view="settings"><span class="nav-icon">⚙</span> Settings</button>
+          <button class="nav-btn nav-btn-compact nav-btn-secondary" data-view="accounts"><span class="nav-icon">🔄</span> Accounts</button>
+          <button id="logoutBtn" class="nav-btn nav-btn-compact nav-btn-logout"><span class="nav-icon">🚪</span> Logout</button>
+        </nav>
+      </aside>
+
+      <!-- Center Column -->
+      <main class="center-column">
+        <!-- Expanded Composer (hidden by default) -->
+        <div id="expandedComposer" class="expanded-composer hidden">
+          <div class="expanded-composer-header">
+            <h3>Create Post</h3>
+            <button class="close-expanded" id="closeExpandedComposer">&times;</button>
+          </div>
+          <div class="expanded-composer-body">
+            <div class="toolbar expanded-toolbar">
+              <button type="button" class="toolbar-btn" id="expBoldBtn" title="Bold">B</button>
+              <button type="button" class="toolbar-btn" id="expItalicBtn" title="Italic"><em>I</em></button>
+              <button type="button" class="toolbar-btn" id="expCodeBtn" title="Code">&lt;/&gt;</button>
+              <button type="button" class="toolbar-btn" id="expLinkBtn" title="Link">&#128279;</button>
+              <div class="toolbar-divider"></div>
+              <button type="button" class="toolbar-btn" id="expMediaBtn" title="Attach image/video">&#128247;</button>
+              <button type="button" class="toolbar-btn" id="expFileBtn" title="Attach file">&#128206;</button>
+              <button type="button" class="toolbar-btn" id="expEmojiBtn" title="Emoji">&#128512;</button>
+            </div>
+            <div style="position: relative;">
+              <div class="emoji-picker" id="expEmojiPicker">
+                <div class="emoji-grid" id="expEmojiGrid"></div>
+              </div>
+            </div>
+            <div id="expLinkForm" class="inline-link-form hidden">
+              <label>URL for "<span id="expLinkText"></span>":</label>
+              <input type="url" id="expLinkUrl" placeholder="https://example.com">
+              <div class="inline-link-actions">
+                <button type="button" id="expLinkCancel" class="btn-secondary">Cancel</button>
+                <button type="button" id="expLinkInsert">Insert</button>
+              </div>
+            </div>
+            <div id="walletHint" class="composer-hint hidden">
+              <span class="hint-icon">💡</span>
+              <span class="hint-text">Unlock your wallet to enable trackable tips on this post</span>
+            </div>
+            <div id="walletSyncHint" class="composer-hint hidden">
+              <span class="hint-icon">⏳</span>
+              <span class="hint-text">Wallet syncing<span id="syncHintProgress"></span> — post will be submitted when sync completes</span>
+            </div>
+            <textarea id="expPostContent" rows="8" placeholder="What's happening? Write something longer..."></textarea>
+            <div id="expMediaPreview" class="media-preview"></div>
+            <div id="expTagHint" class="tag-hint"></div>
+            <input type="file" id="expMediaInput" accept="image/*,video/*" multiple style="display: none;">
+            <input type="file" id="expFileInput" multiple style="display: none;">
+
+            <!-- Paywall toggle and fields -->
+            <div class="paywall-section">
+              <label class="paywall-toggle">
+                <input type="checkbox" id="expPaywallToggle">
+                <span class="paywall-toggle-label">🔒 Paywall this post</span>
+              </label>
+              <div id="expPaywallFields" class="paywall-fields hidden">
+                <div class="paywall-field">
+                  <label for="expPaywallPrice">Price (XMR)</label>
+                  <input type="number" id="expPaywallPrice" min="0.0001" step="0.0001" placeholder="0.001">
+                </div>
+                <div class="paywall-field">
+                  <label for="expPaywallPreview">Public preview (shown before unlock)</label>
+                  <textarea id="expPaywallPreview" rows="2" placeholder="A short teaser visible to everyone..."></textarea>
+                </div>
+                <p class="paywall-hint">Your post body above will be encrypted. Only buyers who pay this price in XMR will be able to read it. Your wallet must be unlocked to create paywalled posts.</p>
+              </div>
+            </div>
+          </div>
+          <div class="expanded-composer-footer">
+            <span class="char-count"><span id="expCharCount">0</span> characters</span>
+            <div class="expanded-composer-actions">
+              <button id="cancelExpandedPost" class="btn-secondary">Cancel</button>
+              <button id="expPostBtn" disabled>Post</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- DM Chat View (hidden by default) -->
+        <div id="dmChatView" class="dm-chat-view hidden">
+          <div class="dm-chat-header">
+            <button class="back-btn" id="dmChatBack">&larr;</button>
+            <div class="dm-chat-user">
+              <div class="dm-chat-avatar" id="dmChatAvatar"></div>
+              <span class="dm-chat-name" id="dmChatName">User</span>
+            </div>
+            <div class="dm-chat-actions">
+              <button class="dm-action-btn" id="dmBlockBtn" title="Block user">Block</button>
+              <button class="dm-action-btn" id="dmMuteBtn" title="Mute notifications">Mute</button>
+            </div>
+          </div>
+          <div class="dm-chat-messages" id="dmChatMessages">
+            <!-- Messages rendered here -->
+          </div>
+          <div id="dmMutualStatus" class="dm-mutual-status hidden"></div>
+          <div id="dmMediaPreview" class="dm-media-preview"></div>
+          <div class="dm-chat-input">
+            <button id="dmMediaBtn" class="dm-attach-btn" title="Attach file">+</button>
+            <textarea id="dmMessageInput" placeholder="Type a message..." rows="2"></textarea>
+            <button id="dmSendBtn">Send</button>
+            <input type="file" id="dmMediaInput" accept="image/*,video/*,*/*" multiple style="display: none;">
+          </div>
+        </div>
+
+        <!-- Timeline -->
+        <div id="posts">
+          <div class="empty">
+            <div class="empty-icon">&#128172;</div>
+            Initializing P2P network... this can take a minute
+          </div>
+        </div>
+
+        <section id="search-section" class="content-section hidden">
+          <div class="section-header">
+            <button class="back-to-feed-btn" id="searchBackBtn">&larr; Back to Feed</button>
+            <h2>Search</h2>
+          </div>
+          <div id="searchContent"></div>
+        </section>
+
+        <section id="trending-section" class="content-section hidden">
+          <div class="section-header">
+            <button class="back-to-feed-btn" id="trendingBackBtn">&larr; Back to Feed</button>
+            <h2>Trending</h2>
+          </div>
+          <div id="trendingContent"></div>
+        </section>
+
+        <section id="settings-section" class="content-section hidden">
+          <div class="section-header">
+            <button class="back-to-feed-btn" id="settingsBackBtn">&larr; Back to Feed</button>
+            <h2>Settings</h2>
+          </div>
+          <div id="settingsContent"></div>
+        </section>
+      </main>
+
+      <!-- Right Column -->
+      <aside class="right-panel" id="rightPanel">
+        <!-- Default: My ID section -->
+        <div id="panel-empty" class="panel-section">
+          <div class="panel-header">
+            <h3>My ID</h3>
+          </div>
+          <div class="panel-content">
+            <p class="swarm-id-hint">Share this so others can follow or message you:</p>
+            <div class="swarm-id-display">
+              <code class="swarm-id-value" id="swarmId">-</code>
+            </div>
+            <button class="copy-btn full-width" id="copySwarmId">Copy My ID</button>
+            <div class="stats-row">
+              <div class="stat">
+                <span class="stat-value" id="feedLength">0</span>
+                <span class="stat-label">Posts</span>
+              </div>
+              <div class="stat">
+                <span class="stat-value" id="peerCount">0</span>
+                <span class="stat-label">Peers</span>
+              </div>
+            </div>
+            <div class="follow-user-section">
+              <p class="follow-hint">Follow someone by pasting their ID:</p>
+              <div class="follow-input-row">
+                <input type="text" id="quickFollowInput" placeholder="Paste Swarm ID...">
+                <button class="btn" id="quickFollowBtn">Follow</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Profile section (your profile settings) -->
+        <div id="profile-section" class="hidden">
+          <div class="panel-header">
+            <h3>Your Profile</h3>
+            <button class="close-panel" data-close="profile">&times;</button>
+          </div>
+          <div class="profile-stats-row" id="myProfileStats">
+            <button class="profile-stat-btn" id="myFollowingBtn">
+              <span class="stat-value" id="myFollowingCount">0</span>
+              <span class="stat-label">Following</span>
+            </button>
+            <button class="profile-stat-btn" id="myFollowersBtn">
+              <span class="stat-value" id="myFollowersCount">0</span>
+              <span class="stat-label">Followers</span>
+            </button>
+          </div>
+          <div class="my-swarm-id-section" id="mySwarmIdSection">
+            <span class="swarm-id-label">Your Swarm ID</span>
+            <code class="swarm-id-value" id="mySwarmIdValue"></code>
+            <button class="btn-small" id="mySwarmIdCopy">Copy</button>
+          </div>
+          <div class="panel-content">
+            <div class="form-group avatar-upload-group">
+              <label>Avatar</label>
+              <div class="avatar-upload-container">
+                <div class="avatar-preview" id="avatarPreview">
+                  <span class="avatar-initial" id="avatarInitial">?</span>
+                </div>
+                <div class="avatar-upload-actions">
+                  <button type="button" class="btn-secondary" id="uploadAvatarBtn">Upload Photo</button>
+                  <button type="button" class="btn-text" id="removeAvatarBtn" style="display: none;">Remove</button>
+                </div>
+                <input type="file" id="avatarInput" accept="image/*" style="display: none;">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="profileName">Display Name</label>
+              <input type="text" id="profileName" placeholder="How should others see you?">
+            </div>
+            <div class="form-group">
+              <label for="profileBio">Bio</label>
+              <textarea id="profileBio" rows="3" placeholder="Tell the world about yourself..."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="profileWebsite">Website</label>
+              <input type="url" id="profileWebsite" placeholder="https://yourwebsite.com">
+            </div>
+            <div class="form-group">
+              <label for="profileMoneroAddress">Monero Address (for tips)</label>
+              <input type="text" id="profileMoneroAddress" placeholder="Your Monero address (optional)">
+            </div>
+            <button id="saveProfileBtn" disabled>Save Profile</button>
+            <div id="profileRenewalBanner" class="profile-renewal-banner hidden">
+              <!-- Rendered dynamically by profile.js -->
+            </div>
+            <div id="profileSyncSection" class="profile-sync-section hidden">
+              <!-- Rendered dynamically by profile.js -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Follow section -->
+        <div id="follow-section" class="hidden">
+          <div class="panel-header">
+            <h3>Follow</h3>
+            <button class="close-panel" data-close="follow">&times;</button>
+          </div>
+          <div class="panel-content">
+            <div class="form-group">
+              <label for="followKey">Swarm ID</label>
+              <input type="text" id="followKey" placeholder="Paste their ID to follow...">
+            </div>
+            <button id="followBtn" disabled>Follow</button>
+            <h4 style="margin-top: 20px; margin-bottom: 12px; color: #8b949e; font-size: 0.85rem; text-transform: uppercase;">Following</h4>
+            <div id="followingList">
+              <div class="empty" style="padding: 20px 0;">Not following anyone yet</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Discovery section -->
+        <div id="discovery-section" class="panel-section hidden">
+          <!-- Discovery Toggle -->
+          <div class="discovery-toggle-row">
+            <label for="discoveryToggle">Make me discoverable</label>
+            <label class="toggle-switch">
+              <input type="checkbox" id="discoveryToggle">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <!-- Discovery Help - Live Now -->
+          <div id="discovery-help-live" class="discovery-help">
+            <p>See Swarmnero users who are currently online. You can follow them directly from here.</p>
+          </div>
+
+          <!-- Discovery Help - Supporters -->
+          <div id="discovery-help-supporters" class="discovery-help hidden">
+            <p>Support Swarmnero for $12 USD/year equivalent in Monero. You'll get a Supporter badge next to your username, your profile published to the supporters directory, and your feed backed up to an always-online server so other users can find, follow, and read your posts 24/7 even when you're offline (up to 100MB).</p>
+          </div>
+
+          <!-- Tabs -->
+          <div class="discovery-tabs">
+            <button class="discovery-tab active" data-tab="live">Live Now <span id="discoveryLiveCount" class="tab-count">0</span></button>
+            <button class="discovery-tab" data-tab="supporters">Supporters <span id="discoverySupporterCount" class="tab-count">0</span></button>
+          </div>
+
+          <!-- Live Tab Content -->
+          <div id="discoveryLiveTab" class="discovery-tab-content">
+            <div id="discoveryList" class="discovery-list">
+              <!-- Live peers rendered here -->
+            </div>
+          </div>
+
+          <!-- Supporters Tab Content -->
+          <div id="discoverySupporterTab" class="discovery-tab-content hidden">
+            <div class="supporter-header">
+              <button id="supportSwarmneroBtn" class="btn-small">Support Swarmnero</button>
+            </div>
+
+            <!-- Support Form (hidden by default, content rendered by JS) -->
+            <div id="supportForm" class="support-form hidden">
+              <!-- Content dynamically rendered by ui/components/discovery.js -->
+            </div>
+
+            <!-- Tag Filter -->
+            <div class="tag-filter">
+              <input type="text" id="supporterTagSearch" placeholder="Filter by tag...">
+              <div id="supporterPopularTags" class="popular-tags"></div>
+            </div>
+
+            <!-- Supporters List -->
+            <div id="supporterList" class="discovery-list">
+              <!-- Cached profiles rendered here -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Accounts section -->
+        <div id="accounts-section" class="hidden">
+          <div class="panel-header">
+            <h3>Accounts</h3>
+            <button class="close-panel" data-close="accounts">&times;</button>
+          </div>
+          <div class="panel-content" id="accountsPanelContent">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Messages section -->
+        <div id="messages-section" class="panel-section hidden">
+          <div class="panel-header">
+            <h3>Messages</h3>
+            <button class="btn-small" id="newMessageBtn">New</button>
+          </div>
+          <div class="panel-content">
+            <div id="messagesList" class="messages-list">
+              <!-- Conversations rendered here -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Notifications section -->
+        <div id="notifications-section" class="panel-section hidden">
+          <div class="panel-header">
+            <h3>Notifications</h3>
+          </div>
+          <div class="panel-content">
+            <div id="notificationsContent">
+              <!-- Pending notifications rendered here -->
+            </div>
+          </div>
+        </div>
+
+        <!-- New Message Picker Modal -->
+        <div id="newMessageModal" class="modal hidden">
+          <div class="modal-content">
+            <h3>New Message</h3>
+            <p style="color: #8b949e; font-size: 0.85rem; margin-bottom: 16px;">
+              Select a mutual follow to start a conversation.
+            </p>
+            <div id="newMessageUserList" class="new-message-user-list">
+              <!-- Users rendered here -->
+            </div>
+            <div class="modal-actions">
+              <button id="newMessageCancel" class="secondary-btn">Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- About section -->
+        <div id="about-section" class="hidden">
+          <div class="panel-header">
+            <h3>About</h3>
+            <button class="close-panel" data-close="about">&times;</button>
+          </div>
+          <div class="panel-content about-section">
+            <p>
+              Swarmnero is a <strong>true peer-to-peer social network</strong> with Monero payments built in.
+              No servers, no relays, no middlemen. You own your data.
+            </p>
+
+            <h4 style="margin-top: 16px; margin-bottom: 8px; color: #e6edf3;">Key Concepts</h4>
+            <dl class="concept-list">
+              <dt><strong>Swarm ID</strong></dt>
+              <dd>Your unique identifier on the network (64-character hex). Share this so others can follow you and see your posts. It's safe to share publicly.</dd>
+
+              <dt><strong>Secret Key</strong></dt>
+              <dd>Your private cryptographic key that controls your identity. <strong style="color: #f85149;">NEVER share this</strong> - anyone with your Secret Key can post as you.</dd>
+
+              <dt><strong>Mutual Follow</strong></dt>
+              <dd>Direct messages require both users to follow each other. This prevents spam and ensures both parties want to communicate.</dd>
+            </dl>
+
+            <h4 style="margin-top: 16px; margin-bottom: 8px; color: #e6edf3;">How P2P Works</h4>
+            <p>
+              There are no central servers. When you post, your content is stored in your local feed (a Hypercore append-only log).
+              When someone follows your Swarm ID, they connect directly to you via the <strong>Hyperswarm DHT</strong> - a distributed hash table that helps peers find each other without any central coordination.
+            </p>
+
+            <h4 style="margin-top: 16px; margin-bottom: 8px; color: #e6edf3;">Tech Stack</h4>
+            <ul>
+              <li><strong>Pear Runtime</strong> - Native P2P app</li>
+              <li><strong>Hypercore</strong> - Signed append-only data logs</li>
+              <li><strong>Hyperswarm DHT</strong> - Decentralized peer discovery</li>
+              <li><strong>Monero</strong> - Private payments</li>
+            </ul>
+
+            <h4 style="margin-top: 16px; margin-bottom: 8px; color: #f0883e;">Important Note</h4>
+            <p style="color: #8b949e; font-size: 0.9rem;">
+              This app is designed for <strong>single-user</strong> use with multiple identities.
+              All accounts on this device can manage (including delete) other accounts.
+              Do not share this app installation with others. Use password protection on accounts you want to secure.
+            </p>
+
+            <h4 style="margin-top: 16px; margin-bottom: 8px; color: #e6edf3;">Links</h4>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <a href="https://github.com/grahamonero/swarmnero" style="color: #58a6ff; text-decoration: none;">GitHub Repository</a>
+              <a href="https://swarmnero.com" style="color: #58a6ff; text-decoration: none;">swarmnero.com</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Wallet section -->
+        <div id="walletSection" class="panel-section hidden">
+          <div class="panel-header">
+            <button class="back-btn" id="walletBackBtn">&larr;</button>
+            <h3>Wallet</h3>
+          </div>
+          <div id="walletContent" class="panel-content">
+            <!-- Content rendered by wallet.js -->
+          </div>
+        </div>
+
+        <!-- Dynamic content panel (profiles, threads, etc.) -->
+        <div id="user-profile-section" class="hidden">
+          <div class="panel-header">
+            <button class="back-btn" id="backToSwarmId">&larr;</button>
+            <h3 id="panelTitle">Profile</h3>
+          </div>
+          <div class="panel-content" id="panelContent">
+            <!-- Dynamic content rendered here -->
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Welcome Screen (shown on startup) -->
+  <div class="welcome-screen hidden" id="welcomeScreen">
+    <div class="welcome-content">
+      <img src="./logo.png" alt="Swarmnero" class="welcome-logo">
+      <h1>Welcome to Swarmnero</h1>
+      <p class="welcome-subtitle">Decentralized social network with Monero payments</p>
+
+      <div class="welcome-section" id="existingAccounts">
+        <h3>Your Accounts</h3>
+        <p class="welcome-hint" id="defaultAccountHint" style="display: none; margin-bottom: 12px; color: #d29922;">
+          A default account was created on install. You can use it or create a new one.
+          Don't forget to <strong>set your profile name</strong> after logging in!
+        </p>
+        <div class="accounts-grid" id="welcomeAccountsList">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <div class="welcome-divider"><span>or</span></div>
+
+      <div class="welcome-section">
+        <h3>Import Account</h3>
+        <p class="welcome-hint">Paste your Secret Key to restore an existing identity</p>
+        <div class="form-group">
+          <input type="password" id="importSecretKey" placeholder="Secret Key (128 hex characters)">
+        </div>
+        <div class="form-group">
+          <input type="text" id="importAccountName" placeholder="Account name (e.g. main, work)">
+        </div>
+        <button id="importAccountBtn" class="secondary-btn">Import Account</button>
+      </div>
+
+      <div class="welcome-divider"><span>or</span></div>
+
+      <div class="welcome-section">
+        <h3>Create New Account</h3>
+        <div class="form-group">
+          <input type="text" id="newAccountNameWelcome" placeholder="Account name (e.g. default, main)">
+        </div>
+        <button id="createFirstAccountBtn">Create Account</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Password Login Modal -->
+  <div class="modal hidden" id="loginModal">
+    <div class="modal-content">
+      <h3>Enter Password</h3>
+      <p>This account is password protected.</p>
+      <div class="form-group">
+        <input type="password" id="passwordInput" placeholder="Password">
+      </div>
+      <div class="modal-actions">
+        <button id="loginCancel" class="secondary-btn">Cancel</button>
+        <button id="loginSubmit">Unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Secret Key Warning Modal -->
+  <div class="modal hidden" id="exportWarningModal">
+    <div class="modal-content warning">
+      <h3>Warning: Exporting Secret Key</h3>
+      <p><strong>Your Secret Key gives complete control over your identity.</strong></p>
+      <ul>
+        <li>Anyone with this key can post as you</li>
+        <li>Anyone with this key can access your account</li>
+        <li>This action cannot be undone</li>
+      </ul>
+      <p>Only export if you need to back up or transfer your identity.</p>
+      <div class="form-group" id="exportPasswordGroup">
+        <label>Enter account password to confirm:</label>
+        <input type="password" id="exportPasswordInput" placeholder="Password">
+      </div>
+      <div class="modal-actions">
+        <button id="exportCancel" class="secondary-btn">Cancel</button>
+        <button id="exportConfirm" class="danger-btn">Export Anyway</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Wallet Modal -->
+  <div class="modal hidden" id="createWalletModal">
+    <div class="modal-content">
+      <h3>Create Wallet</h3>
+      <p>Create a new Monero wallet for this account.</p>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="createWalletPassword" placeholder="Enter password">
+      </div>
+      <div class="form-group">
+        <label>Confirm Password</label>
+        <input type="password" id="createWalletConfirm" placeholder="Confirm password">
+      </div>
+      <div class="modal-actions">
+        <button id="createWalletCancel" class="secondary-btn">Cancel</button>
+        <button id="createWalletSubmit">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Restore Wallet Modal -->
+  <div class="modal hidden" id="restoreWalletModal">
+    <div class="modal-content">
+      <h3>Restore Wallet</h3>
+      <div class="form-group">
+        <label>25-Word Seed Phrase</label>
+        <textarea id="restoreSeed" rows="3" placeholder="Enter your seed phrase"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Restore Height (required)</label>
+        <input type="number" id="restoreHeight" placeholder="Block number when wallet was created" required>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="restoreWalletPassword" placeholder="Enter password">
+      </div>
+      <div class="form-group">
+        <label>Confirm Password</label>
+        <input type="password" id="restoreWalletConfirm" placeholder="Confirm password">
+      </div>
+      <div class="modal-actions">
+        <button id="restoreWalletCancel" class="secondary-btn">Cancel</button>
+        <button id="restoreWalletSubmit">Restore</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unlock Wallet Modal -->
+  <div class="modal hidden" id="unlockWalletModal">
+    <div class="modal-content">
+      <h3>Unlock Wallet</h3>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="unlockWalletPassword" placeholder="Enter password">
+      </div>
+      <div class="modal-actions">
+        <button id="unlockWalletCancel" class="secondary-btn">Cancel</button>
+        <button id="unlockWalletSubmit">Unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Wallet Modal -->
+  <div class="modal hidden" id="deleteWalletModal">
+    <div class="modal-content">
+      <h3>Delete Wallet</h3>
+      <p style="color: #f85149; margin-bottom: 16px;">This action cannot be undone. Make sure you have your seed phrase backed up!</p>
+      <div class="form-group">
+        <label>Enter password to confirm</label>
+        <input type="password" id="deleteWalletPassword" placeholder="Enter password">
+      </div>
+      <div class="modal-actions">
+        <button id="deleteWalletCancel" class="secondary-btn">Cancel</button>
+        <button id="deleteWalletSubmit" class="danger-btn">Delete Wallet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Send Preview Modal -->
+  <div class="modal hidden" id="sendPreviewModal">
+    <div class="modal-content">
+      <h3>Confirm Send</h3>
+      <div class="send-preview">
+        <p>To: <code id="sendPreviewAddress"></code></p>
+        <p>Amount: <strong id="sendPreviewAmount"></strong></p>
+        <p>Fee: <strong id="sendPreviewFee"></strong></p>
+        <p>Total: <strong id="sendPreviewTotal"></strong></p>
+      </div>
+      <div class="modal-actions">
+        <button id="sendPreviewCancel" class="secondary-btn">Cancel</button>
+        <button id="sendPreviewConfirm">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tip Modal -->
+  <div class="modal hidden" id="tipModal">
+    <div class="modal-content">
+      <h3>Tip Post</h3>
+      <div class="tip-post-preview">
+        <span class="tip-author" id="tipAuthor"></span>
+        <p class="tip-content" id="tipContent"></p>
+      </div>
+      <div id="tipError" class="tip-error hidden"></div>
+      <div id="tipAmountStep">
+        <div id="tipFallbackNotice" class="tip-fallback-notice hidden"></div>
+        <div class="form-group">
+          <label>Amount (XMR)</label>
+          <input type="text" id="tipAmount" placeholder="0.01">
+          <span id="tipAmountUSD" class="tip-usd-preview"></span>
+        </div>
+        <p class="tip-address">To: <code id="tipAddress"></code></p>
+        <div class="modal-actions">
+          <button id="tipCancel" class="secondary-btn">Cancel</button>
+          <button id="tipPreview">Preview</button>
+        </div>
+      </div>
+      <div id="tipLockedQRStep" class="hidden">
+        <div id="tipQRFallbackNotice" class="tip-fallback-notice hidden"></div>
+        <p class="tip-locked-message">Your wallet is locked. Scan this QR code with a Monero wallet app to send a tip:</p>
+        <div id="tipQRContainer" style="margin: 16px 0; background: white; padding: 16px; border-radius: 8px; display: inline-block;"></div>
+        <div style="margin-bottom: 16px;">
+          <code id="tipQRAddress" style="font-size: 0.75rem; word-break: break-all; display: block; padding: 8px; background: rgba(13,17,23,0.6); border-radius: 4px;"></code>
+        </div>
+        <div class="modal-actions">
+          <button id="tipQRCopy" class="secondary-btn">Copy Address</button>
+          <button id="tipQRUnlock">Unlock Wallet</button>
+          <button id="tipQRClose">Close</button>
+        </div>
+      </div>
+      <div id="tipConfirmStep" class="hidden">
+        <p>Amount: <strong id="tipConfirmAmount"></strong></p>
+        <p>Fee: <strong id="tipConfirmFee"></strong></p>
+        <p>Total: <strong id="tipConfirmTotal"></strong></p>
+        <div class="modal-actions">
+          <button id="tipBack" class="secondary-btn">Back</button>
+          <button id="tipConfirm">Send Tip</button>
+        </div>
+      </div>
+      <div id="tipSuccessStep" class="hidden">
+        <p class="tip-success">Tip sent!</p>
+        <p>Transaction: <code id="tipTxHash"></code></p>
+        <button id="tipDone">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- No Tip Address Modal -->
+  <div class="modal hidden" id="noTipAddressModal">
+    <div class="modal-content warning">
+      <h3>Can't Tip This Post</h3>
+      <p>This user hasn't set up a tip address yet.</p>
+      <p style="color: #8b949e; font-size: 0.9rem;">They can add a Monero address in their profile settings to receive tips.</p>
+      <div class="modal-actions">
+        <button id="noTipAddressClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Seed Display Modal -->
+  <div class="modal hidden" id="seedModal">
+    <div class="modal-content">
+      <h3>Seed Phrase</h3>
+      <div class="seed-warning">
+        <strong>Warning:</strong> Never share your seed phrase. Anyone with it can steal your funds.
+      </div>
+      <div class="seed-display" id="seedDisplay" style="user-select: text;"></div>
+      <div class="modal-actions">
+        <button id="seedCopyBtn" class="secondary-btn">Copy Seed</button>
+        <button id="seedClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transaction Details Modal -->
+  <div id="txDetailsModal" class="modal hidden">
+    <div class="modal-content tx-details-modal">
+      <h3>Transaction Details</h3>
+      <div class="tx-details-list">
+        <div class="tx-detail"><label>Type:</label> <span id="txDetailType"></span></div>
+        <div class="tx-detail"><label>Amount:</label> <span id="txDetailAmount"></span></div>
+        <div class="tx-detail"><label>Fee:</label> <span id="txDetailFee"></span></div>
+        <div class="tx-detail"><label>TX ID:</label> <code id="txDetailTxid"></code></div>
+        <div class="tx-detail"><label>Address:</label> <code id="txDetailAddress"></code></div>
+        <div class="tx-detail"><label>TX Key:</label> <code id="txDetailKey"></code></div>
+        <div class="tx-detail"><label>Confirmations:</label> <span id="txDetailConf"></span></div>
+        <div class="tx-detail hidden" id="txDetailPostRow"><label>Tipped Post:</label> <a href="#" id="txDetailViewPost" class="view-post-link">View Post</a></div>
+      </div>
+      <div class="modal-actions">
+        <button id="txDetailsCopy" class="secondary-btn">Copy TX ID</button>
+        <button id="txDetailsClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Code Modal -->
+  <div class="modal hidden" id="qrCodeModal">
+    <div class="modal-content" style="text-align: center;">
+      <h3>Receive Address</h3>
+      <div id="qrCodeContainer" style="margin: 20px 0; background: white; padding: 16px; border-radius: 8px; display: inline-block;">
+        <!-- QR code generated here by QRCode library -->
+      </div>
+      <div style="margin-bottom: 16px;">
+        <code id="qrCodeAddress" style="font-size: 0.75rem; word-break: break-all; display: block; padding: 8px; background: rgba(13,17,23,0.6); border-radius: 4px;"></code>
+      </div>
+      <div class="modal-actions">
+        <button id="qrCodeCopy" class="secondary-btn">Copy Address</button>
+        <button id="qrCodeClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help Modal -->
+  <div class="modal hidden" id="helpModal">
+    <div class="modal-content help-modal">
+      <h3 id="helpTitle">Getting Started</h3>
+      <div id="helpContent" class="help-content">
+        <!-- Content rendered by JS -->
+      </div>
+      <div class="modal-actions">
+        <button id="helpClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login Wallet Unlock Prompt Modal -->
+  <div class="modal hidden" id="loginWalletPromptModal">
+    <div class="modal-content">
+      <h3>Unlock Wallet?</h3>
+      <p>You have a wallet configured. Unlock it to enable tipping and receive payments.</p>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="loginWalletPassword" placeholder="Enter wallet password">
+      </div>
+      <div id="loginWalletError" class="tip-error hidden"></div>
+      <div class="modal-actions">
+        <button id="loginWalletSkip" class="secondary-btn">Skip</button>
+        <button id="loginWalletUnlock">Unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./lib/qrcode.min.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

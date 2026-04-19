@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Data (identity, feeds)
+data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Agent/tool caches
+.claude/
+
+# Docs - no .md files except README
+docs/
+*.md
+!README.md
+
+# Logs
+*.log
+npm-debug.log*
+
+# Runtime
+.pear/

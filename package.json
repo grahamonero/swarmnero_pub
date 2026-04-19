@@ -1,0 +1,49 @@
+{
+  "name": "swarmnero",
+  "version": "0.5.28",
+  "description": "P2P Social Network with Monero",
+  "type": "module",
+  "pear": {
+    "name": "swarmnero",
+    "type": "desktop",
+    "pre": "pear-electron/pre",
+    "gui": {
+      "width": 1400,
+      "height": 900,
+      "minWidth": 1000,
+      "minHeight": 600
+    },
+    "links": [
+      "https://api.coingecko.com",
+      "https://node.sethforprivacy.com",
+      "https://xmr-node.cakewallet.com:18081",
+      "https://node.community.rino.io:18081",
+      "https://nodes.hashvault.pro:18081",
+      "https://xmr.0xrpc.io",
+      "https://public-monero-node.xyz",
+      "https://kowalski.fiatfaucet.com",
+      "https://xmr.europeanmonero.observer",
+      "https://xmr.ci.vet",
+      "https://xmr.thinhhv.com"
+    ]
+  },
+  "license": "MIT",
+  "scripts": {
+    "dev": "pear run --dev .",
+    "start": "pear run ."
+  },
+  "dependencies": {
+    "autobase": "^7.24.0",
+    "b4a": "^1.6.6",
+    "corestore": "^7.7.0",
+    "hyperdrive": "^13.1.0",
+    "hyperswarm": "^4.8.4",
+    "monero-ts": "^0.11.7",
+    "pear-bridge": "^1.2.4",
+    "pear-electron": "^1.7.25",
+    "sodium-native": "^4.3.1"
+  },
+  "devDependencies": {
+    "pear-interface": "^1.0.0"
+  }
+}
