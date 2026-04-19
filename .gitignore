@@ -17,10 +17,10 @@ Thumbs.db
 # Agent/tool caches
 .claude/
 
-# Docs - no .md files except README
-docs/
+# No stray markdown except README (docs/ hosts the GitHub Pages site)
 *.md
 !README.md
+!docs/**/*.md
 
 # Logs
 *.log

@@ -1,0 +1,158 @@
+:root {
+  --bg: #0d1117;
+  --bg-alt: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-dim: #8b949e;
+  --accent: #f46b1a;
+  --accent-dim: #c9540f;
+  --green: #3fb950;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-dim); }
+
+.wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+
+/* Header */
+header {
+  border-bottom: 1px solid var(--border);
+  padding: 18px 0;
+  position: sticky;
+  top: 0;
+  background: rgba(13, 17, 23, 0.92);
+  backdrop-filter: blur(8px);
+  z-index: 10;
+}
+.header-inner { display: flex; align-items: center; justify-content: space-between; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); }
+.brand img { width: 28px; height: 28px; border-radius: 4px; }
+nav a { color: var(--text-dim); margin-left: 24px; font-size: 14px; }
+nav a:hover { color: var(--text); }
+
+/* Hero */
+.hero {
+  text-align: center;
+  padding: 80px 0 60px;
+  border-bottom: 1px solid var(--border);
+}
+.hero h1 {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+}
+.hero .tagline {
+  font-size: 20px;
+  color: var(--text-dim);
+  max-width: 640px;
+  margin: 0 auto 32px;
+}
+.hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn:hover { background: #21262d; border-color: #484f58; color: var(--text); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
+
+/* Sections */
+section { padding: 60px 0; border-bottom: 1px solid var(--border); }
+section h2 {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: -0.01em;
+}
+section .lead { color: var(--text-dim); margin-bottom: 32px; max-width: 640px; }
+
+/* Download grid */
+.downloads {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+.dl-card {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+}
+.dl-card h3 { font-size: 18px; margin-bottom: 4px; }
+.dl-card p { color: var(--text-dim); font-size: 13px; margin-bottom: 16px; }
+
+/* Features grid */
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+}
+.feature {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+}
+.feature h3 { font-size: 16px; margin-bottom: 6px; color: var(--text); }
+.feature p { color: var(--text-dim); font-size: 14px; }
+
+/* Code blocks */
+pre {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 13px;
+  color: var(--text);
+  margin-top: 16px;
+}
+code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.9em; }
+
+/* About */
+.about p { margin-bottom: 16px; max-width: 720px; color: var(--text-dim); }
+.about p strong { color: var(--text); }
+
+/* Footer */
+footer {
+  padding: 30px 0 60px;
+  color: var(--text-dim);
+  font-size: 14px;
+  text-align: center;
+}
+footer a { color: var(--text-dim); }
+footer a:hover { color: var(--text); }
+footer .footer-links a { margin: 0 10px; }
+
+@media (max-width: 600px) {
+  .hero { padding: 50px 0 40px; }
+  .hero h1 { font-size: 36px; }
+  .hero .tagline { font-size: 17px; }
+  nav a { margin-left: 14px; }
+}
