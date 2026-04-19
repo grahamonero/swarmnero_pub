@@ -19,8 +19,7 @@
         <span>Swarmnero</span>
       </a>
       <nav>
-        <a href="#pear">Pear</a>
-        <a href="#download">Download</a>
+        <a href="#pear">Install</a>
         <a href="#about">About</a>
         <a href="https://github.com/grahamonero/swarmnero_pub" target="_blank" rel="noopener">GitHub</a>
       </nav>
@@ -35,59 +34,26 @@
         <p class="tagline">Swarmnero is a true P2P social network. No servers. No algorithms. No ads. Just you, your posts, and your people — with native Monero tipping built in.</p>
         <div class="hero-cta">
           <a class="btn btn-primary" href="#pear">Install with Pear</a>
-          <a class="btn" href="#download">Standalone download</a>
+          <a class="btn" href="https://github.com/grahamonero/swarmnero_pub" target="_blank" rel="noopener">View source</a>
         </div>
-        <p class="hero-sub">Recommended: run via <a href="https://pears.com" target="_blank" rel="noopener">Pear Runtime</a>. Auto-updates over P2P, no installer warnings.</p>
+        <p class="hero-sub">Runs on <a href="https://pears.com" target="_blank" rel="noopener">Pear Runtime</a>. Auto-updates over P2P.</p>
       </div>
     </section>
 
     <section id="pear">
       <div class="wrap">
-        <h2>Run with Pear Runtime <span class="pill">Recommended</span></h2>
-        <p class="lead">Swarmnero is built on <a href="https://pears.com" target="_blank" rel="noopener">Pear Runtime</a> — the peer-to-peer app platform from Holepunch. Install Pear once, then launch Swarmnero with a single command. Updates arrive automatically over the P2P network.</p>
+        <h2>Install</h2>
+        <p class="lead">Swarmnero runs on <a href="https://pears.com" target="_blank" rel="noopener">Pear Runtime</a> — the peer-to-peer app platform from Holepunch. Install Pear once, then launch Swarmnero with a single command. Updates arrive automatically over the P2P network.</p>
         <ol class="steps">
           <li><strong>Install Pear Runtime</strong> (one-time, ~30 seconds):
             <pre><code>npm i -g pear</code></pre>
-            Don't have Node.js? See the <a href="pear.html">full Pear install guide</a>.
+            Don't have Node.js? See the <a href="pear.html">full install guide</a>.
           </li>
           <li><strong>Launch Swarmnero:</strong>
             <pre><code>pear run pear://t6athit7zo98y7wb7kupmeaihxu3p5tft5s55nx5a5s634meppgy</code></pre>
           </li>
         </ol>
-        <p class="lead" style="margin-top:24px;">Why Pear? No installer warnings. Auto-updates. One runtime powers many P2P apps. <a href="pear.html">Read the full guide →</a></p>
-      </div>
-    </section>
-
-    <section id="download">
-      <div class="wrap">
-        <h2>Standalone download</h2>
-        <p class="lead">Don't want to install Pear? Grab a native installer for macOS, Windows, or Linux. These are Electron wrappers that bundle Pear and launch Swarmnero on first run.</p>
-        <div class="notice notice-warn">
-          <strong>Unsigned builds.</strong> These installers are not code-signed (no Apple Developer ID, no Microsoft Authenticode cert). Your OS will show a security warning. This is expected, not a problem with the build:
-          <ul>
-            <li><strong>macOS:</strong> After opening the .dmg, <em>right-click</em> the Swarmnero app and choose <em>Open</em> (don't double-click). Confirm the dialog once; future launches work normally. On newer macOS, you may also need to run <code>xattr -d com.apple.quarantine /Applications/Swarmnero.app</code> in Terminal.</li>
-            <li><strong>Windows:</strong> SmartScreen will say "Windows protected your PC." Click <em>More info</em> → <em>Run anyway</em>.</li>
-            <li><strong>Linux:</strong> Mark the AppImage executable (<code>chmod +x</code>) or install the .deb with <code>sudo dpkg -i</code>.</li>
-          </ul>
-          If you'd rather skip the warnings entirely, <a href="#pear">use Pear Runtime</a>.
-        </div>
-        <div class="downloads">
-          <div class="dl-card">
-            <h3>macOS</h3>
-            <p>Apple Silicon &amp; Intel</p>
-            <a class="btn btn-primary" href="https://github.com/grahamonero/swarmnero_pub/releases/latest" target="_blank" rel="noopener">Download .dmg</a>
-          </div>
-          <div class="dl-card">
-            <h3>Windows</h3>
-            <p>64-bit installer</p>
-            <a class="btn btn-primary" href="https://github.com/grahamonero/swarmnero_pub/releases/latest" target="_blank" rel="noopener">Download .exe</a>
-          </div>
-          <div class="dl-card">
-            <h3>Linux</h3>
-            <p>AppImage &amp; .deb</p>
-            <a class="btn btn-primary" href="https://github.com/grahamonero/swarmnero_pub/releases/latest" target="_blank" rel="noopener">Download</a>
-          </div>
-        </div>
+        <p class="lead" style="margin-top:24px;">Why Pear? No installer warnings. Auto-updates over P2P. One runtime powers many P2P apps. <a href="pear.html">Read the full guide →</a></p>
       </div>
     </section>
 
@@ -135,7 +101,6 @@
     <div class="wrap">
       <div class="footer-links">
         <a href="https://github.com/grahamonero/swarmnero_pub" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://github.com/grahamonero/swarmnero_pub/releases" target="_blank" rel="noopener">Releases</a>
         <a href="https://pears.com" target="_blank" rel="noopener">Pear Runtime</a>
         <a href="https://www.getmonero.org" target="_blank" rel="noopener">Monero</a>
       </div>
