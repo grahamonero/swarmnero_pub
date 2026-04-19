@@ -32,8 +32,8 @@ Swarmnero is a decentralized social network built on [Pear Runtime](https://pear
 
 ```bash
 # Clone the repo
-git clone https://github.com/grahamonero/swarmnero.git
-cd swarmnero
+git clone https://github.com/grahamonero/swarmnero_pub.git
+cd swarmnero_pub
 
 # Install dependencies
 npm install
