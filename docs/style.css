@@ -48,6 +48,14 @@ nav a:hover { color: var(--text); }
   padding: 80px 0 60px;
   border-bottom: 1px solid var(--border);
 }
+.hero-logo {
+  display: block;
+  margin: 0 auto 28px;
+  width: 160px;
+  height: auto;
+  border-radius: 16px;
+  image-rendering: -webkit-optimize-contrast;
+}
 .hero h1 {
   font-size: 48px;
   font-weight: 700;
@@ -61,6 +69,7 @@ nav a:hover { color: var(--text); }
   margin: 0 auto 32px;
 }
 .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.hero-sub { margin-top: 18px; font-size: 14px; color: var(--text-dim); }
 
 .btn {
   display: inline-flex;
@@ -89,6 +98,76 @@ section h2 {
   letter-spacing: -0.01em;
 }
 section .lead { color: var(--text-dim); margin-bottom: 32px; max-width: 640px; }
+
+/* Pill label */
+.pill {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  vertical-align: middle;
+  margin-left: 8px;
+  letter-spacing: 0.02em;
+}
+
+/* Numbered steps */
+.steps {
+  list-style: none;
+  counter-reset: step;
+  padding: 0;
+  margin: 0;
+}
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding: 16px 0 16px 48px;
+  color: var(--text-dim);
+}
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 14px;
+  width: 32px;
+  height: 32px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+}
+.steps strong { color: var(--text); }
+.steps pre { margin: 10px 0; }
+
+/* Notice box */
+.notice {
+  border-radius: 8px;
+  padding: 18px 20px;
+  margin: 0 0 28px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.notice-warn {
+  background: rgba(244, 107, 26, 0.08);
+  border: 1px solid rgba(244, 107, 26, 0.35);
+  color: var(--text);
+}
+.notice strong { color: var(--text); }
+.notice ul { margin: 10px 0 10px 20px; }
+.notice li { margin-bottom: 6px; color: var(--text-dim); }
+.notice li strong { color: var(--text); }
+.notice code {
+  background: rgba(0,0,0,0.4);
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--text);
+}
 
 /* Download grid */
 .downloads {
@@ -152,6 +231,7 @@ footer .footer-links a { margin: 0 10px; }
 
 @media (max-width: 600px) {
   .hero { padding: 50px 0 40px; }
+  .hero-logo { width: 120px; margin-bottom: 20px; }
   .hero h1 { font-size: 36px; }
   .hero .tagline { font-size: 17px; }
   nav a { margin-left: 14px; }

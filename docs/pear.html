@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Install Pear Runtime — Swarmnero</title>
+  <meta name="description" content="How to install Pear Runtime and launch Swarmnero on macOS, Windows, or Linux.">
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="wrap header-inner">
+      <a href="index.html" class="brand">
+        <img src="logo.png" alt="">
+        <span>Swarmnero</span>
+      </a>
+      <nav>
+        <a href="index.html#pear">Pear</a>
+        <a href="index.html#download">Download</a>
+        <a href="index.html#about">About</a>
+        <a href="https://github.com/grahamonero/swarmnero_pub" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" style="padding:60px 0 40px;">
+      <div class="wrap">
+        <h1 style="font-size:36px;">Install Pear Runtime</h1>
+        <p class="tagline" style="font-size:18px;">The recommended way to run Swarmnero. One runtime, many P2P apps, auto-updates over the network.</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>Why Pear?</h2>
+        <p class="lead">Pear is a peer-to-peer application runtime from <a href="https://holepunch.to" target="_blank" rel="noopener">Holepunch</a> — the same team that builds Hypercore and Hyperswarm. It's the native environment Swarmnero was designed for.</p>
+        <div class="features" style="margin-top:24px;">
+          <div class="feature">
+            <h3>No installer warnings</h3>
+            <p>Pear handles its own signed install. Swarmnero runs inside Pear, so macOS Gatekeeper and Windows SmartScreen never see an unsigned binary.</p>
+          </div>
+          <div class="feature">
+            <h3>Auto-updates over P2P</h3>
+            <p>New versions of Swarmnero replicate to your device over the same DHT your posts use. No "please update" dialogs, no download servers.</p>
+          </div>
+          <div class="feature">
+            <h3>One runtime, many apps</h3>
+            <p>Install Pear once and any P2P app built on it launches with a single <code>pear run</code> command.</p>
+          </div>
+          <div class="feature">
+            <h3>Fully open source</h3>
+            <p>Pear is MIT-licensed. The <a href="https://github.com/holepunchto/pear" target="_blank" rel="noopener">full source</a> is on GitHub.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>Prerequisites</h2>
+        <p class="lead">You need <a href="https://nodejs.org" target="_blank" rel="noopener">Node.js 18 or newer</a>. Check what you have:</p>
+        <pre><code>node --version</code></pre>
+        <p class="lead" style="margin-top:16px;">If Node.js isn't installed or is older than 18:</p>
+        <div class="features">
+          <div class="feature">
+            <h3>macOS</h3>
+            <p>Easiest: <a href="https://brew.sh" target="_blank" rel="noopener">Homebrew</a> → <code>brew install node</code>. Or download the installer from <a href="https://nodejs.org" target="_blank" rel="noopener">nodejs.org</a>.</p>
+          </div>
+          <div class="feature">
+            <h3>Windows</h3>
+            <p>Download the LTS installer from <a href="https://nodejs.org" target="_blank" rel="noopener">nodejs.org</a> and run it. The defaults are fine.</p>
+          </div>
+          <div class="feature">
+            <h3>Linux</h3>
+            <p>Use your distro's package manager (<code>apt install nodejs npm</code>, <code>dnf install nodejs</code>, etc.), or follow <a href="https://nodejs.org/en/download/package-manager" target="_blank" rel="noopener">nodejs.org</a>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>Install Pear</h2>
+        <p class="lead">Open a terminal and run:</p>
+        <pre><code>npm i -g pear</code></pre>
+        <p class="lead" style="margin-top:16px;">That's it. Verify:</p>
+        <pre><code>pear --version</code></pre>
+        <div class="notice notice-warn" style="margin-top:20px;">
+          <strong>Permissions errors on macOS/Linux?</strong> If <code>npm i -g</code> fails with EACCES, either prefix with <code>sudo</code> or (better) <a href="https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally" target="_blank" rel="noopener">configure npm's prefix</a> so it installs into your home directory.
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>Launch Swarmnero</h2>
+        <p class="lead">Once Pear is installed:</p>
+        <pre><code>pear run pear://&lt;key-coming-soon&gt;</code></pre>
+        <p class="lead" style="margin-top:16px;">The first launch pulls the latest build of Swarmnero over the P2P network (a few seconds on a decent connection), then opens the app. Subsequent launches are instant — Pear only downloads deltas.</p>
+        <p class="lead">To update Swarmnero later, simply run the same command. Pear checks for a newer version automatically.</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>Troubleshooting</h2>
+        <div class="features">
+          <div class="feature">
+            <h3>"pear: command not found"</h3>
+            <p>npm's global bin directory isn't on your PATH. Run <code>npm config get prefix</code> to see where it installed, then add that <code>/bin</code> subdirectory to your shell PATH.</p>
+          </div>
+          <div class="feature">
+            <h3>Firewall prompts</h3>
+            <p>Pear connects over UDP for the Hyperswarm DHT. If your firewall blocks UDP, peer discovery won't work. Allow Pear when prompted.</p>
+          </div>
+          <div class="feature">
+            <h3>Behind a corporate proxy</h3>
+            <p>Pear uses P2P, not HTTP. Corporate proxies that only pass HTTPS will prevent peer connections. A VPN generally works around this.</p>
+          </div>
+          <div class="feature">
+            <h3>Still stuck?</h3>
+            <p>File an issue on <a href="https://github.com/grahamonero/swarmnero_pub/issues" target="_blank" rel="noopener">GitHub</a>, or read the <a href="https://docs.pears.com" target="_blank" rel="noopener">official Pear documentation</a>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>Prefer a standalone installer?</h2>
+        <p class="lead">If you'd rather skip Pear and just double-click an installer, <a href="index.html#download">download a standalone build</a>. Note that those builds are unsigned, so your OS will show a security warning on first launch.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="footer-links">
+        <a href="https://github.com/grahamonero/swarmnero_pub" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/grahamonero/swarmnero_pub/releases" target="_blank" rel="noopener">Releases</a>
+        <a href="https://pears.com" target="_blank" rel="noopener">Pear Runtime</a>
+        <a href="https://www.getmonero.org" target="_blank" rel="noopener">Monero</a>
+      </div>
+      <p style="margin-top:16px;">Built on Hypercore, Hyperswarm, and Monero.</p>
+    </div>
+  </footer>
+</body>
+</html>

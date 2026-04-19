@@ -16,7 +16,7 @@ Swarmnero is a decentralized social network built on [Pear Runtime](https://pear
 - **True P2P Architecture** — Posts sync directly between peers via Hyperswarm DHT
 - **Monero Tipping** — Send tips directly to creators, no payment processors
 - **End-to-End Encrypted DMs** — Private messages between mutual followers
-- **The Hive** — Community directory for discovery
+- **Supporter Directory** — Discover other users who support the project
 - **Friend-of-Friend Discovery** — Find interesting people through your network
 - **Hashtag Search** — Discover content via tags across your social graph
 - **Multi-Account Support** — Multiple identities per device with optional encryption
@@ -88,7 +88,7 @@ npm run dev
 
 ### Discovery
 - **Live Now**: See who's online via DHT
-- **The Hive**: Paid directory listings ($1 USD in XMR)
+- **Supporters**: Directory of users backing development ($12/year in XMR)
 - **Friend-of-Friend**: Discover content from people your follows follow
 
 ## Privacy
