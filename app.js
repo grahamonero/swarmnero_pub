@@ -888,8 +888,9 @@ async function continueInit(accountManager) {
   await feed.init()
   // Mark sync server VPS as infrastructure so user protocols skip it
   // (must happen before FoF/DM/Discovery handlers attach)
-  const { SYNC_SERVER_HOST } = await import('./lib/sync-client.js')
-  feed.markInfrastructureHost(SYNC_SERVER_HOST)
+  const { resolveSyncServerHost } = await import('./lib/sync-client.js')
+  const syncHost = await resolveSyncServerHost()
+  feed.markInfrastructureHost(syncHost)
   console.log('Feed initialized:', feed.swarmId.slice(0, 16) + '...')
 
   // Auto-follow official account for new users
@@ -1317,8 +1318,9 @@ async function continueInit(accountManager) {
     }
 
     // Mark sync server VPS as infrastructure so user protocols skip it
-    const { SYNC_SERVER_HOST: SYNC_HOST_2 } = await import('./lib/sync-client.js')
-    newFeed.markInfrastructureHost(SYNC_HOST_2)
+    const { resolveSyncServerHost: resolveSyncServerHost2 } = await import('./lib/sync-client.js')
+    const syncHost2 = await resolveSyncServerHost2()
+    newFeed.markInfrastructureHost(syncHost2)
 
     const newMedia = new Media(newFeed.store, newFeed.swarm)
     await newMedia.init()
