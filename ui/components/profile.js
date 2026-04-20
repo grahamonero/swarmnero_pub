@@ -10,24 +10,28 @@ import { getSupporterManager } from '../../lib/supporter-manager.js'
 import { runFeedBackupPurchase } from './feed-backup.js'
 import { escapeHtml } from '../utils/dom.js'
 
-// Reserved names that cannot be used as display names (case-insensitive)
-const RESERVED_NAMES = [
-  'swarmnero',
-  'admin',
-  'administrator',
-  'moderator',
-  'official',
-  'support',
-  'system',
-  'bot'
-]
+// Reserved display names (case-insensitive). Value is the swarmId of the sole
+// account permitted to use the name, or null if no account may claim it.
+const OFFICIAL_SWARM_ID = '5f5ef421cd609b2d98d8ef3d11eb53bfb623ac3d8126e4189b1aaead1298ee52'
+const RESERVED_NAMES = {
+  'swarmnero': OFFICIAL_SWARM_ID,
+  'admin': null,
+  'administrator': null,
+  'moderator': null,
+  'official': null,
+  'support': null,
+  'system': null,
+  'bot': null
+}
 
 /**
- * Check if a name is reserved (case-insensitive)
+ * Check if a name is reserved for the given account's swarmId.
  */
-function isReservedName(name) {
+function isReservedName(name, ownerSwarmId = null) {
   if (!name) return false
-  return RESERVED_NAMES.includes(name.toLowerCase())
+  const lower = name.toLowerCase()
+  if (!(lower in RESERVED_NAMES)) return false
+  return RESERVED_NAMES[lower] !== ownerSwarmId
 }
 
 // Pending avatar data (base64 data URL after resize)
@@ -296,8 +300,8 @@ export function initProfile(refreshUI) {
     try {
       const profileName = dom.profileNameEl.value.trim()
 
-      // Check if name is reserved
-      if (isReservedName(profileName)) {
+      // Check if name is reserved (allows the real owner's swarmId to claim it)
+      if (isReservedName(profileName, state.feed?.swarmId)) {
         alert('This name is reserved and cannot be used')
         dom.saveProfileBtn.disabled = false
         return
