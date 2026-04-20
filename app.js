@@ -441,6 +441,27 @@ async function showLoginWalletPrompt() {
 /**
  * Show the help modal with specified content
  */
+// Warn that another live instance of the same account is online. Hypercore
+// is single-writer, so two instances can collide and lock the feed. Shown
+// at most once per session; clicking the × dismisses it (not persistent —
+// reappears on relaunch if still applicable).
+function showDuplicateInstanceBanner() {
+  if (document.getElementById('duplicateInstanceBanner')) return
+  const banner = document.createElement('div')
+  banner.id = 'duplicateInstanceBanner'
+  banner.className = 'duplicate-instance-banner'
+  banner.innerHTML = `
+    <div class="dib-inner">
+      <strong>⚠ This account is signed in on another device.</strong>
+      <span> Swarmnero feeds are single-writer — posting from two places at once can lock your feed. Sign out elsewhere to continue safely.</span>
+      <button class="dib-close" aria-label="Dismiss">×</button>
+    </div>
+  `
+  banner.querySelector('.dib-close').addEventListener('click', () => banner.remove())
+  document.body.appendChild(banner)
+  console.warn('[App] Duplicate instance of this account detected on the network')
+}
+
 function showHelpModal(type) {
   const modal = document.getElementById('helpModal')
   const titleEl = document.getElementById('helpTitle')
@@ -973,6 +994,7 @@ async function continueInit(accountManager) {
   state.discovery = discovery
   state.discovery.setDataDir(DATA_DIR)
   state.discovery.setFeed(feed)
+  state.discovery.onDuplicateInstance = () => showDuplicateInstanceBanner()
   console.log('Discovery initialized')
 
   // Initialize FoF (after feed is ready)
@@ -1358,6 +1380,7 @@ async function continueInit(accountManager) {
 
     // Reinitialize Discovery for new identity (enabled by default)
     const newDiscovery = new Discovery(newFeed.swarm, newIdentity)
+    newDiscovery.onDuplicateInstance = () => showDuplicateInstanceBanner()
     state.discovery = newDiscovery
     state.discovery.setDataDir(DATA_DIR)
     state.discovery.setFeed(newFeed)

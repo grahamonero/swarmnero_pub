@@ -72,10 +72,6 @@ export const state = {
   timelineVisibleCount: 25 // Currently visible posts count (increases with "Load more")
 }
 
-// Expose for DevTools diagnostics. Writing through this handle bypasses
-// normal flow — read-only inspection recommended.
-try { globalThis.__swarmneroState = state } catch (_) {}
-
 // DOM element references (initialized after DOM ready)
 export const dom = {
   // Status
