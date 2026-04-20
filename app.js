@@ -885,6 +885,16 @@ async function continueInit(accountManager) {
   }
   // Event-driven refresh instead of polling
   feed.onDataUpdate = () => scheduleRefresh(refreshUI)
+  // One-time keypair extraction on legacy accounts — persist so the
+  // feed's swarmId becomes portable across devices from now on.
+  feed.onHypercoreKeyPairExtracted = async () => {
+    try {
+      await state.accountManager.persistHypercoreKeyPair()
+      console.log('[App] Persisted hypercoreKeyPair for portable swarmId')
+    } catch (err) {
+      console.warn('[App] Could not persist hypercoreKeyPair:', err.message)
+    }
+  }
   await feed.init()
   // Mark sync server VPS as infrastructure so user protocols skip it
   // (must happen before FoF/DM/Discovery handlers attach)
@@ -1298,6 +1308,14 @@ async function continueInit(accountManager) {
       dom.headerPeerCountEl.textContent = `${count} ${label}`
     }
     newFeed.onDataUpdate = () => scheduleRefresh(refreshUI)
+    newFeed.onHypercoreKeyPairExtracted = async () => {
+      try {
+        await state.accountManager.persistHypercoreKeyPair()
+        console.log('[App] Persisted hypercoreKeyPair for portable swarmId')
+      } catch (err) {
+        console.warn('[App] Could not persist hypercoreKeyPair:', err.message)
+      }
+    }
 
     // Retry feed init with exponential backoff if lock issues occur
     let retries = 3
