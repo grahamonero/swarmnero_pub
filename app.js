@@ -625,15 +625,19 @@ async function refreshUI() {
 
     // Get peer profiles, swarm ID mapping, and supporter listings
     const { profiles, swarmIdToPubkey, pubkeyToSwarmId, supporterListings } = await state.feed.getPeerProfiles()
-    state.peerProfiles = profiles
+    // Merge rather than replace — `profiles` / mappings here only cover feeds
+    // we follow, but Discovery hellos populate these same state maps for peers
+    // who follow US (e.g. our followers) without us following them back.
+    // Replacing would wipe those entries on every refresh.
+    state.peerProfiles = { ...state.peerProfiles, ...profiles }
     // Store on feed for FoF access
-    state.feed.peerProfiles = profiles
+    state.feed.peerProfiles = state.peerProfiles
     state.feed.myProfile = state.myProfile
-    state.feed.pubkeyToSwarmId = pubkeyToSwarmId
     // Add our own swarm ID to pubkey mapping (needed for tips on our own posts)
     swarmIdToPubkey[state.feed.swarmId] = state.identity.pubkeyHex
-    state.swarmIdToPubkey = swarmIdToPubkey
-    state.pubkeyToSwarmId = pubkeyToSwarmId
+    state.swarmIdToPubkey = { ...state.swarmIdToPubkey, ...swarmIdToPubkey }
+    state.pubkeyToSwarmId = { ...state.pubkeyToSwarmId, ...pubkeyToSwarmId }
+    state.feed.pubkeyToSwarmId = state.pubkeyToSwarmId
 
     // Add peer supporter listings to the directory (P2P sync)
     if (supporterListings && Object.keys(supporterListings).length > 0) {
