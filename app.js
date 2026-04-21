@@ -37,7 +37,7 @@ import * as paywallStorage from './lib/paywall-storage.js'
 import { deriveLocalStorageKey } from './lib/dm-crypto.js'
 
 // Official Swarmnero account - new users auto-follow this account
-const OFFICIAL_SWARM_ID = '5f5ef421cd609b2d98d8ef3d11eb53bfb623ac3d8126e4189b1aaead1298ee52'
+const OFFICIAL_SWARM_ID = '9aa8bf64357d4db09ea62aa6ddd771affc161d43624e3d162e1d115af5503e74'
 
 // Data directory - Pear provides app storage path
 const DATA_DIR = Pear.config.storage || './data'

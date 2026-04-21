@@ -12,7 +12,7 @@ import { escapeHtml } from '../utils/dom.js'
 
 // Reserved display names (case-insensitive). Value is the swarmId of the sole
 // account permitted to use the name, or null if no account may claim it.
-const OFFICIAL_SWARM_ID = '5f5ef421cd609b2d98d8ef3d11eb53bfb623ac3d8126e4189b1aaead1298ee52'
+const OFFICIAL_SWARM_ID = '9aa8bf64357d4db09ea62aa6ddd771affc161d43624e3d162e1d115af5503e74'
 const RESERVED_NAMES = {
   'swarmnero': OFFICIAL_SWARM_ID,
   'admin': null,
