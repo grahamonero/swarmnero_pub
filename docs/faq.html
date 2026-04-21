@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Swarmnero FAQ</title>
+  <meta name="description" content="Frequently asked questions about Swarmnero — peer-to-peer social with Monero.">
+  <link rel="icon" type="image/png" href="/logo.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="wrap header-inner">
+      <a href="index.html" class="brand">
+        <img src="logo.png" alt="">
+        <span>Swarmnero</span>
+      </a>
+      <nav>
+        <a href="index.html#pear">Install</a>
+        <a href="index.html#about">About</a>
+        <a href="faq.html">FAQ</a>
+        <a href="https://github.com/grahamonero/swarmnero_pub" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="faq-hero">
+      <div class="wrap">
+        <h1>FAQ</h1>
+        <p class="tagline">How Swarmnero actually works — the P2P model, accounts, the wallet, and the tradeoffs.</p>
+      </div>
+    </section>
+
+    <section class="faq">
+      <div class="wrap">
+        <h2>The peer-to-peer model</h2>
+
+        <div class="qa">
+          <h3>Do I need to be online to see posts?</h3>
+          <p>You can always see posts you've already replicated to your device — if you've followed someone and their feed has synced in the past, those posts stay local. You don't need the original author online to read them.</p>
+          <p>But new posts only arrive when either you and the author are both online at the same time, or a peer who already has their posts (a friend-of-friend who follows them, or the optional feed backup server) is online. So for a new follow who's offline, you may not see anything until the first time you're both online together or a mutual peer relays the data.</p>
+        </div>
+
+        <div class="qa">
+          <h3>Why can't I see an account's posts after I paste their Swarm ID?</h3>
+          <p>Following someone only tells your app <em>who</em> you're interested in — it doesn't instantly pull their data. You have to connect to a peer that has their feed (often the author themselves, or someone who follows them). If everyone involved is offline, you'll see their follow appear in your list but no posts until replication happens. Stay online for a minute after following and their content should start to arrive.</p>
+        </div>
+
+        <div class="qa">
+          <h3>What's a Swarm ID?</h3>
+          <p>It's a 64-character hex string that uniquely identifies your social feed. Share it with someone and they can follow you. It's a public identifier — it reveals no secret information and can be pasted freely.</p>
+        </div>
+
+        <div class="qa">
+          <h3>How does Swarmnero find people if there's no server?</h3>
+          <p>Three mechanisms:</p>
+          <ul>
+            <li><strong>Live Now</strong> — users who opt into discovery join a shared DHT topic; you see who's currently online and can click through to their profile.</li>
+            <li><strong>Friends-of-Friends</strong> — when you follow someone, your app asks them for a sample of the people <em>they</em> follow and recent tagged posts from those people.</li>
+            <li><strong>Hashtag search</strong> — posts tagged with <code>#tags</code> are searchable across your network (own feed + follows + FoF cache).</li>
+          </ul>
+          <p>If a post has no hashtag, it stays visible only to your direct followers. That's intentional — it's the privacy floor.</p>
+        </div>
+
+        <h2>Accounts &amp; identity</h2>
+
+        <div class="qa">
+          <h3>What happens if I lose my Secret Key?</h3>
+          <p>The account is unrecoverable. There is no central authority to reset it. Export your Secret Key from Accounts → Export Secret Key and store it somewhere safe (password manager, paper backup). If the account has a password, you'll need that too.</p>
+        </div>
+
+        <div class="qa">
+          <h3>Can I sign into the same account on two devices?</h3>
+          <p>Not simultaneously — yet. Each account's feed is a single-writer Hypercore, and two devices writing to it at the same time corrupts the feed. Swarmnero shows a warning banner and disables posting when it detects a duplicate instance. For now, sign out on one device before using the other. Real multi-device simultaneous posting requires a different underlying structure (Autobase) and is on the roadmap.</p>
+        </div>
+
+        <div class="qa">
+          <h3>Does importing a Secret Key on a new device copy all my data?</h3>
+          <p>Content you've signed (posts, follows, profile, DMs) replicates in as peers come online. The follower list and DM conversation list rebuild over time as those peers reconnect. The wallet is <em>separate</em> — it has its own 25-word seed you restore independently via the "Restore Wallet" flow.</p>
+        </div>
+
+        <h2>Wallet &amp; Monero</h2>
+
+        <div class="qa">
+          <h3>Is the wallet the same as my account?</h3>
+          <p>No. The Monero wallet is independent from your social identity. You can use Swarmnero without ever unlocking a wallet (you just won't be able to send tips or purchase paywall unlocks). The wallet has its own 25-word seed — back it up separately from your account Secret Key.</p>
+        </div>
+
+        <div class="qa">
+          <h3>How does tipping work?</h3>
+          <p>Each post generates a fresh Monero subaddress while your wallet is unlocked. Tippers send XMR to that subaddress; the author's wallet sees the incoming transaction and can correlate it back to the specific post. Tip events are batched with a 6-hour delay and shuffled before broadcast, so the timing of an on-chain payment can't be linked to a swarm event trivially.</p>
+        </div>
+
+        <div class="qa">
+          <h3>What's a paywalled post?</h3>
+          <p>The author encrypts the post body with a random key, puts a preview + price in the clear, and publishes it. A buyer pays the price to a unique subaddress, and the author's app sees the payment, verifies it, and releases the decryption key to that buyer (encrypted with the buyer's own public key). No refunds — the payment and key exchange are both peer-to-peer and irreversible.</p>
+        </div>
+
+        <h2>Network &amp; privacy</h2>
+
+        <div class="qa">
+          <h3>Does Swarmnero work over Tor?</h3>
+          <p>No. Hyperswarm uses UDP (UDX) for peer discovery, and Tor only routes TCP. Even with Tor running on your machine, Swarmnero's P2P traffic bypasses it and your real IP is visible to peers. Use a VPN that routes UDP if you want IP privacy.</p>
+        </div>
+
+        <div class="qa">
+          <h3>What data is stored on a server?</h3>
+          <p>By default, nothing. All data lives on the devices of users who replicate it. There's an optional Swarmnero-run VPS feed backup for paid supporters ($12/year in XMR), which mirrors your feed so followers can still see your posts while you're offline.</p>
+        </div>
+
+        <h2>Common issues</h2>
+
+        <div class="qa">
+          <h3>I clicked a paywalled post and my wallet balance shows "locked pending confirmation" for a few minutes.</h3>
+          <p>Monero protocol locks newly received funds for ~10 confirmations (~20 min). The balance is correct and the transaction is in the wallet — the lock is at the blockchain layer, not the app. The paywall unlock happens automatically in the background, typically within 15–30 seconds of the payment being visible to the author.</p>
+        </div>
+
+        <div class="qa">
+          <h3>My Followers list shows a Swarm ID instead of a name.</h3>
+          <p>That follower hasn't been online during any of your sessions, so Swarmnero hasn't received their profile data yet. Once their app and yours are both online at the same time, their name and avatar will cache and show on future sessions.</p>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="faq.html">FAQ</a>
+        <a href="https://github.com/grahamonero/swarmnero_pub" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://pears.com" target="_blank" rel="noopener">Pear Runtime</a>
+        <a href="https://www.getmonero.org" target="_blank" rel="noopener">Monero</a>
+      </div>
+      <p style="margin-top:16px;">Built on Hypercore, Hyperswarm, and Monero.</p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -56,6 +56,23 @@ nav a:hover { color: var(--text); }
   border-radius: 16px;
   image-rendering: -webkit-optimize-contrast;
 }
+.built-with {
+  margin-top: 16px;
+}
+.built-with-link {
+  display: inline-block;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-alt);
+}
+.built-with-link:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
 .release-badge {
   margin-top: 20px;
   color: var(--text-dim);
@@ -67,6 +84,65 @@ nav a:hover { color: var(--text); }
 }
 .release-badge .release-length {
   color: var(--text-dim);
+}
+
+/* FAQ page */
+.faq-hero {
+  text-align: center;
+  padding: 60px 0 30px;
+  border-bottom: 1px solid var(--border);
+}
+.faq-hero h1 {
+  font-size: 36px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.faq {
+  padding: 40px 0 80px;
+}
+.faq h2 {
+  font-size: 22px;
+  margin: 40px 0 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--accent);
+}
+.faq h2:first-of-type {
+  margin-top: 0;
+}
+.faq .qa {
+  margin-bottom: 28px;
+}
+.faq .qa h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+.faq .qa p {
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  line-height: 1.7;
+}
+.faq .qa p:last-child {
+  margin-bottom: 0;
+}
+.faq .qa ul {
+  margin: 10px 0 10px 20px;
+  color: var(--text-dim);
+}
+.faq .qa ul li {
+  margin-bottom: 6px;
+  line-height: 1.6;
+}
+.faq .qa strong {
+  color: var(--text);
+}
+.faq .qa code {
+  background: var(--bg-alt);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
 }
 
 /* App preview screenshot */
