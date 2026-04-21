@@ -14,6 +14,16 @@ import * as wallet from '../../lib/wallet.js'
 import { pushPanel } from './panel.js'
 import { showProfileInCenter } from './timeline.js'
 import { runFeedBackupPurchase } from './feed-backup.js'
+import { savePeerProfilesDebounced } from '../../lib/peer-profile-cache.js'
+
+// Debounced write of state.peerProfiles for the active account so offline
+// peers we've seen before still render by name on next restart.
+function persistPeerProfiles() {
+  const dataDir = (typeof Pear !== 'undefined' && Pear.config?.storage) || null
+  const pubkeyHex = state.identity?.pubkeyHex
+  if (!dataDir || !pubkeyHex) return
+  savePeerProfilesDebounced(dataDir, pubkeyHex, state.peerProfiles)
+}
 
 let refreshUICallback = null
 
@@ -1563,6 +1573,9 @@ export function setupDiscoveryCallbacks() {
         website: peer.profile.website ?? existing.website
       }
       if (state.feed) state.feed.peerProfiles = state.peerProfiles
+      // Persist to disk so offline peers we've seen before still render by name
+      // across app restarts.
+      persistPeerProfiles()
     }
     // Detect unfollows: if peer's following list doesn't include us, remove from our followers
     if (peer.following && state.feed && peer.swarmId) {

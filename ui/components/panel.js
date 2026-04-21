@@ -20,6 +20,15 @@ import {
 } from '../../lib/events.js'
 import * as wallet from '../../lib/wallet.js'
 import { getSupporterManager } from '../../lib/supporter-manager.js'
+import { savePeerProfilesDebounced } from '../../lib/peer-profile-cache.js'
+
+// Persist the current peerProfiles map for the active account. Called after
+// FoF-sourced profiles fill in unknown followers/following entries.
+function persistDiscoveredProfile() {
+  const dataDir = (typeof Pear !== 'undefined' && Pear.config?.storage) || null
+  if (!dataDir || !state.identity?.pubkeyHex) return
+  savePeerProfilesDebounced(dataDir, state.identity.pubkeyHex, state.peerProfiles)
+}
 
 // Thread reply state
 let threadPendingMedia = []
@@ -351,6 +360,7 @@ export function showFollowingModal(pubkey, overrideList = null) {
               name: profile.name, bio: profile.bio,
               avatar: profile.avatar, website: profile.website
             }
+            persistDiscoveredProfile()
           }
         }
       }
@@ -471,6 +481,7 @@ export function showFollowersModal(pubkey, overrideList = null) {
               name: profile.name, bio: profile.bio,
               avatar: profile.avatar, website: profile.website
             }
+            persistDiscoveredProfile()
           }
         }
       }

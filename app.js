@@ -35,6 +35,7 @@ import { SyncClient } from './lib/sync-client.js'
 import * as paywall from './lib/paywall.js'
 import * as paywallStorage from './lib/paywall-storage.js'
 import { deriveLocalStorageKey } from './lib/dm-crypto.js'
+import { loadPeerProfiles } from './lib/peer-profile-cache.js'
 
 // Official Swarmnero account - new users auto-follow this account
 const OFFICIAL_SWARM_ID = '9aa8bf64357d4db09ea62aa6ddd771affc161d43624e3d162e1d115af5503e74'
@@ -1020,6 +1021,11 @@ async function continueInit(accountManager) {
   const identity = accountManager.currentIdentity
   console.log('Identity loaded:', identity.pubkeyHex.slice(0, 16) + '...')
 
+  // Seed peerProfiles from on-disk cache so offline followers still render
+  // with a name/avatar instead of a raw swarmId.
+  state.peerProfiles = loadPeerProfiles(DATA_DIR, identity.pubkeyHex)
+  console.log('[App] Loaded', Object.keys(state.peerProfiles).length, 'cached peer profiles')
+
   // Set paywall storage encryption key (encrypts paywall-keys.json at rest)
   paywallStorage.setEncryptionKey(deriveLocalStorageKey(identity.secretKey))
 
@@ -1545,6 +1551,11 @@ async function continueInit(accountManager) {
 
     // Reset wallet state for new account
     state.walletUnlocked = false
+
+    // Seed peerProfiles from on-disk cache for the new account
+    state.peerProfiles = loadPeerProfiles(DATA_DIR, newIdentity.pubkeyHex)
+    state.swarmIdToPubkey = {}
+    state.pubkeyToSwarmId = {}
 
     // Reinitialize DM for new identity
     const newDM = new DM(newFeed.store, newFeed.swarm, newIdentity)
