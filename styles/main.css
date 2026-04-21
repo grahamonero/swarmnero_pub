@@ -6347,3 +6347,60 @@ button:disabled {
 .duplicate-instance-banner .dib-close:hover {
   color: #e6edf3;
 }
+
+/* Timeline filter toggle bar */
+.timeline-toggle-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: flex-start;
+  padding: 10px 0;
+  margin-bottom: 4px;
+  background: #0d1117;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.6);
+}
+/* Hide toggle bar when the timeline isn't visible (composer/search/trending/etc.) */
+.center-column:has(> #posts.hidden) > .timeline-toggle-bar,
+.center-column:has(> #expandedComposer:not(.hidden)) > .timeline-toggle-bar,
+.center-column:has(> #dmChatView:not(.hidden)) > .timeline-toggle-bar,
+.center-column:has(> .content-section:not(.hidden)) > .timeline-toggle-bar {
+  display: none;
+}
+.timeline-toggle-btn {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #e6edf3;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.timeline-toggle-btn:hover {
+  background: #30363d;
+}
+.timeline-toggle-btn.active {
+  background: #ff6600;
+  border-color: #ff6600;
+  color: #0d1117;
+}
+.timeline-toggle-btn.active:hover {
+  background: #ff7a1a;
+  border-color: #ff7a1a;
+}
+
+/* "My reply" top-level card (visible only in "My posts" filter mode) */
+.my-reply-card .my-reply-context {
+  color: #8b949e;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+.my-reply-card .my-reply-context .post-author {
+  color: #ff6600;
+  cursor: pointer;
+}
+.my-reply-card .my-reply-context .post-author:hover {
+  text-decoration: underline;
+}

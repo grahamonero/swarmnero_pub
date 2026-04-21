@@ -422,9 +422,16 @@ export async function performSearch(tag) {
   // Add to recent searches
   addToRecentSearches(normalizedTag)
 
-  // Get results from TagIndex
+  // Get results from TagIndex, excluding soft-deleted posts.
+  // Mirrors the canonical filter used in lib/feed.js getPosts and ui/components/timeline.js renderPosts.
   const tagIndex = getTagIndex()
-  const results = tagIndex.search(normalizedTag)
+  const timeline = state.currentTimeline || []
+  const deletedKeys = new Set(
+    timeline
+      .filter(e => e.type === 'delete' && e.pubkey)
+      .map(e => `${e.pubkey}:${e.post_timestamp}`)
+  )
+  const results = tagIndex.search(normalizedTag, deletedKeys)
 
   // Enhance results with full post data
   currentSearchResults = []

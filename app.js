@@ -163,6 +163,18 @@ function initQuickFollow() {
   })
 }
 
+// "My posts" timeline toggle
+function initTimelineToggle(refreshUI) {
+  if (!dom.myPostsToggleBtn) return
+  dom.myPostsToggleBtn.addEventListener('click', async () => {
+    state.showMyPostsOnly = !state.showMyPostsOnly
+    state.timelineVisibleCount = state.timelinePageSize
+    dom.myPostsToggleBtn.classList.toggle('active', state.showMyPostsOnly)
+    dom.myPostsToggleBtn.setAttribute('aria-pressed', state.showMyPostsOnly ? 'true' : 'false')
+    await refreshUI()
+  })
+}
+
 // Store timeline for panel access
 let currentTimeline = []
 
@@ -1082,6 +1094,7 @@ async function continueInit(accountManager) {
   initFollow(refreshUI)
   initCopySwarmId()
   initQuickFollow()
+  initTimelineToggle(refreshUI)
   initPanel()
   initMenuBar()
   initAccounts()
@@ -1238,6 +1251,11 @@ async function continueInit(accountManager) {
     state.walletUnlocked = false
     state.dmUnreadCounts = {}
     state.activeDMPubkey = null
+    state.showMyPostsOnly = false
+    if (dom.myPostsToggleBtn) {
+      dom.myPostsToggleBtn.classList.remove('active')
+      dom.myPostsToggleBtn.setAttribute('aria-pressed', 'false')
+    }
 
     // Reset timeline pagination
     resetTimelinePagination()

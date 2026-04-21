@@ -142,15 +142,23 @@ export async function renderPosts(posts, refreshUI) {
     posts.filter(p => p.type === 'delete' && p.pubkey).map(p => `${p.pubkey}:${p.post_timestamp}`)
   )
 
+  const myPubkey = state.identity?.pubkeyHex
+  const filterMyOnly = !!(state.showMyPostsOnly && myPubkey)
+
   // Get all posts (not deleted)
-  const postEvents = posts.filter(p =>
+  let postEvents = posts.filter(p =>
     p.type === 'post' && !deletedKeys.has(`${p.pubkey}:${p.timestamp}`)
   )
 
   // Get all reposts (exclude deleted ones)
-  const repostEvents = posts.filter(p =>
+  let repostEvents = posts.filter(p =>
     p.type === 'repost' && !deletedKeys.has(`${p.pubkey}:${p.timestamp}`)
   )
+
+  if (filterMyOnly) {
+    postEvents = postEvents.filter(p => p.pubkey === myPubkey)
+    repostEvents = repostEvents.filter(p => p.pubkey === myPubkey)
+  }
 
   // Build timeline items: original posts + reposts (sorted by time)
   const timelineItems = []
@@ -162,8 +170,13 @@ export async function renderPosts(posts, refreshUI) {
 
   // Add reposts (find original post and wrap it)
   for (const repost of repostEvents) {
-    const originalPost = postEvents.find(p =>
-      p.pubkey === repost.to_pubkey && p.timestamp === repost.post_timestamp
+    // When filtering to my posts, originalPost lookup must include posts from
+    // anyone (reposts are of others' posts). Use full posts array.
+    const originalPost = posts.find(p =>
+      p.type === 'post' &&
+      p.pubkey === repost.to_pubkey &&
+      p.timestamp === repost.post_timestamp &&
+      !deletedKeys.has(`${p.pubkey}:${p.timestamp}`)
     )
     if (originalPost) {
       timelineItems.push({
@@ -176,11 +189,27 @@ export async function renderPosts(posts, refreshUI) {
     }
   }
 
+  // In "My posts" mode, surface my replies as top-level items so replies to
+  // other users' posts are visible.
+  if (filterMyOnly) {
+    const myReplies = posts.filter(e =>
+      e.type === 'reply' &&
+      e.pubkey === myPubkey &&
+      !deletedKeys.has(`${e.pubkey}:${e.timestamp}`)
+    )
+    for (const reply of myReplies) {
+      timelineItems.push({ type: 'myreply', reply, timestamp: reply.timestamp })
+    }
+  }
+
   // Sort by timestamp, newest first
   timelineItems.sort((a, b) => b.timestamp - a.timestamp)
 
   if (timelineItems.length === 0) {
-    dom.postsEl.innerHTML = '<div class="empty"><div class="empty-icon">&#128172;</div>No posts yet. Write something or follow someone!</div>'
+    const emptyMsg = filterMyOnly
+      ? "You haven't posted or replied yet."
+      : 'No posts yet. Write something or follow someone!'
+    dom.postsEl.innerHTML = `<div class="empty"><div class="empty-icon">&#128172;</div>${emptyMsg}</div>`
     return
   }
 
@@ -188,8 +217,6 @@ export async function renderPosts(posts, refreshUI) {
   const totalItems = timelineItems.length
   const visibleItems = timelineItems.slice(0, state.timelineVisibleCount)
   const hasMoreItems = totalItems > state.timelineVisibleCount
-
-  const myPubkey = state.identity?.pubkeyHex
 
   // Helper to get avatar HTML for a user
   function getAvatarHtml(pubkey, size = 'post') {
@@ -313,6 +340,7 @@ export async function renderPosts(posts, refreshUI) {
                 <button class="action-btn reply-tip-btn" data-pubkey="${safePubkey}" data-timestamp="${safeTs}" data-is-own="${isOwnReply}" title="Send tip">
                   <svg class="action-icon monero-icon" viewBox="0 0 496 512" width="16" height="16"><path fill="currentColor" d="M352 384h108.4C417 455.9 338.1 504 248 504S79 455.9 35.6 384H144V256.2L248 361l104-105v128zM88 336V128l159.4 159.4L408 128v208h74.8c8.5-25.1 13.2-52 13.2-80C496 119 385 8 248 8S0 119 0 256c0 28 4.6 54.9 13.2 80H88z"/></svg>
                 </button>
+                ${isOwnReply ? `<button class="action-btn delete-btn reply-delete-btn" data-timestamp="${safeTs}" data-is-reply="true" title="Delete reply">&#128465;</button>` : ''}
               </div>
               <div class="inline-repost-form hidden" data-pubkey="${safePubkey}" data-timestamp="${safeTs}">
                 <textarea class="inline-repost-input" placeholder="Add a comment (optional)..." rows="2"></textarea>
@@ -450,6 +478,33 @@ export async function renderPosts(posts, refreshUI) {
   `
   }
 
+  // Render a top-level "my reply" card (only appears when "My posts" is toggled on)
+  function renderMyReplyCard(reply) {
+    const hasReplyMedia = reply.media && reply.media.length > 0
+    const displayName = getDisplayName(reply.pubkey, state.identity, state.myProfile, state.peerProfiles)
+    const parentName = getDisplayName(reply.to_pubkey, state.identity, state.myProfile, state.peerProfiles)
+    const safePk = escapeHtml(reply.pubkey || '')
+    const safeTs = escapeHtml(String(reply.timestamp || ''))
+    const safeParentPk = escapeHtml(reply.to_pubkey || '')
+    const safeParentTs = escapeHtml(String(reply.post_timestamp || ''))
+
+    return `
+      <div class="post my-reply-card" data-pubkey="${safeParentPk}" data-timestamp="${safeParentTs}">
+        <div class="my-reply-context">↳ Replying to <span class="post-author" data-pubkey="${safeParentPk}">@${escapeHtml(parentName)}</span></div>
+        <div class="post-header">
+          ${getAvatarHtml(reply.pubkey, 'post')}
+          <div class="post-author-info">
+            <span class="post-author" data-pubkey="${safePk}">${escapeHtml(displayName)}</span>
+            <span class="post-time">${formatTime(reply.timestamp)}</span>
+          </div>
+          <button class="delete-btn" data-timestamp="${safeTs}" data-is-reply="true" title="Delete reply">&#128465;</button>
+        </div>
+        <div class="post-content">${renderMarkdown(reply.content || '')}</div>
+        ${hasReplyMedia ? `<div class="reply-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''}
+      </div>
+    `
+  }
+
   // Build HTML for visible items only
   let postsHtml = visibleItems.map((item, idx) => {
     if (item.type === 'repost') {
@@ -458,6 +513,8 @@ export async function renderPosts(posts, refreshUI) {
         comment: item.comment,
         repostTimestamp: item.timestamp
       })
+    } else if (item.type === 'myreply') {
+      return renderMyReplyCard(item.reply)
     } else {
       return renderPostWithReplies(item.post, idx)
     }
@@ -502,7 +559,12 @@ export async function renderPosts(posts, refreshUI) {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation()
       const isRepost = btn.dataset.isRepost === 'true'
-      const message = isRepost ? 'Delete this repost?' : 'Delete this post?'
+      const isReply = btn.dataset.isReply === 'true'
+      const message = isRepost
+        ? 'Delete this repost?'
+        : isReply
+          ? 'Delete this reply?'
+          : 'Delete this post?'
       if (!confirm(message)) return
       btn.disabled = true
       try {

@@ -69,7 +69,10 @@ export const state = {
 
   // Timeline pagination
   timelinePageSize: 25,    // Number of posts per page
-  timelineVisibleCount: 25 // Currently visible posts count (increases with "Load more")
+  timelineVisibleCount: 25, // Currently visible posts count (increases with "Load more")
+
+  // Timeline filter: when true, show only the logged-in user's posts/reposts/replies
+  showMyPostsOnly: false
 }
 
 // DOM element references (initialized after DOM ready)
@@ -83,6 +86,8 @@ export const dom = {
 
   // Posts
   postsEl: null,
+  timelineToggleBar: null,
+  myPostsToggleBtn: null,
 
   // Profile
   profileNameEl: null,
@@ -257,6 +262,8 @@ export function initDom() {
 
   // Posts
   dom.postsEl = document.getElementById('posts')
+  dom.timelineToggleBar = document.getElementById('timelineToggleBar')
+  dom.myPostsToggleBtn = document.getElementById('myPostsToggleBtn')
 
   // Profile
   dom.profileNameEl = document.getElementById('profileName')

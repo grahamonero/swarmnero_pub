@@ -14,18 +14,33 @@ let activePeriod = 'all'  // '24h', '7d', or 'all'
 let trendingData = []     // Cached trending data
 
 /**
+ * Build a Set of "pubkey:timestamp" keys for deleted posts from the current timeline.
+ * Mirrors the canonical filter used in lib/feed.js getPosts and ui/components/timeline.js renderPosts.
+ * @returns {Set<string>}
+ */
+function buildDeletedKeys() {
+  const timeline = state.currentTimeline || []
+  return new Set(
+    timeline
+      .filter(e => e.type === 'delete' && e.pubkey)
+      .map(e => `${e.pubkey}:${e.post_timestamp}`)
+  )
+}
+
+/**
  * Render the trending panel
  */
 export function renderTrending() {
   const container = dom.trendingContent || document.getElementById('trendingContent')
   if (!container) return
 
-  // Get trending data from TagIndex
+  // Get trending data from TagIndex, excluding posts that have been soft-deleted
   const tagIndex = getTagIndex()
-  const allTrending = tagIndex.getTrending(20) // Get more to filter by time
+  const deletedKeys = buildDeletedKeys()
+  const allTrending = tagIndex.getTrending(20, deletedKeys) // Get more to filter by time
 
   // Filter by time period
-  trendingData = filterByPeriod(allTrending, activePeriod)
+  trendingData = filterByPeriod(allTrending, activePeriod, deletedKeys)
 
   container.innerHTML = `
     <div class="trending-container">
@@ -51,9 +66,10 @@ export function renderTrending() {
  * Filter trending tags by time period
  * @param {Array} tags - Array of { tag, count } from TagIndex
  * @param {string} period - '24h', '7d', or 'all'
+ * @param {Set<string>} [deletedKeys] - Optional set of "pubkey:timestamp" keys for deleted posts
  * @returns {Array} Filtered tags with post counts for the period
  */
-function filterByPeriod(tags, period) {
+function filterByPeriod(tags, period, deletedKeys = null) {
   if (period === 'all') {
     return tags.slice(0, 10)
   }
@@ -69,13 +85,13 @@ function filterByPeriod(tags, period) {
     return tags.slice(0, 10)
   }
 
-  // Get TagIndex to filter by timestamp
+  // Get TagIndex to filter by timestamp (deleted posts already excluded via deletedKeys)
   const tagIndex = getTagIndex()
   const filteredTags = []
 
   for (const { tag } of tags) {
     // Get posts for this tag and filter by time
-    const posts = tagIndex.search(tag)
+    const posts = tagIndex.search(tag, deletedKeys)
     const recentPosts = posts.filter(p => p.timestamp >= cutoffTime)
 
     if (recentPosts.length > 0) {
