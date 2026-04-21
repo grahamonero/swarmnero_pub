@@ -6371,6 +6371,35 @@ button:disabled {
   color: #e6edf3;
 }
 
+/* While a duplicate instance is live, grey out every control that would cause
+   a write to our own feed. Prevents the Hypercore-conflict foot-gun. */
+body.duplicate-instance-active #expPostBtn,
+body.duplicate-instance-active #createPostBtn,
+body.duplicate-instance-active .send-reply-btn,
+body.duplicate-instance-active .send-center-reply-btn,
+body.duplicate-instance-active #sendThreadReply,
+body.duplicate-instance-active .send-repost-btn,
+body.duplicate-instance-active #saveProfileBtn,
+body.duplicate-instance-active #followBtn,
+body.duplicate-instance-active #quickFollowBtn,
+body.duplicate-instance-active .follow-hidden-btn,
+body.duplicate-instance-active .center-follow-toggle,
+body.duplicate-instance-active .profile-follow-btn,
+body.duplicate-instance-active .delete-btn,
+body.duplicate-instance-active #tipConfirm,
+body.duplicate-instance-active #previewSendBtn,
+body.duplicate-instance-active #sendPreviewConfirm,
+body.duplicate-instance-active .like-btn,
+body.duplicate-instance-active .reply-btn,
+body.duplicate-instance-active .reply-reply-btn,
+body.duplicate-instance-active .action-btn.repost-btn,
+body.duplicate-instance-active .reply-repost-btn,
+body.duplicate-instance-active .paywall-unlock-btn {
+  pointer-events: none;
+  opacity: 0.45;
+  cursor: not-allowed !important;
+}
+
 /* Update-ready banner (fixed bottom, dismissible, offers Restart button) */
 .update-ready-banner {
   position: fixed;

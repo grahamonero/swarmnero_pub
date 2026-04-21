@@ -462,21 +462,59 @@ async function showLoginWalletPrompt() {
 // is single-writer, so two instances can collide and lock the feed. Shown
 // at most once per session; clicking the × dismisses it (not persistent —
 // reappears on relaunch if still applicable).
-function showDuplicateInstanceBanner() {
+// Track the most recent time we heard from each duplicate instance. Used to
+// auto-clear the banner + re-enable writes after a period of silence.
+const duplicateInstanceLastSeen = new Map() // instanceId -> timestamp
+let duplicateInstanceWatcher = null
+const DUPLICATE_INSTANCE_TIMEOUT_MS = 2 * 60 * 1000 // 2 minutes
+
+function showDuplicateInstanceBanner(info = {}) {
+  if (info.instanceId) {
+    duplicateInstanceLastSeen.set(info.instanceId, Date.now())
+  }
+
+  document.body.classList.add('duplicate-instance-active')
+
+  if (!duplicateInstanceWatcher) {
+    duplicateInstanceWatcher = setInterval(evaluateDuplicateInstanceTimeout, 15000)
+  }
+
   if (document.getElementById('duplicateInstanceBanner')) return
   const banner = document.createElement('div')
   banner.id = 'duplicateInstanceBanner'
   banner.className = 'duplicate-instance-banner'
   banner.innerHTML = `
     <div class="dib-inner">
-      <strong>⚠ This account is signed in on another device.</strong>
-      <span> Swarmnero feeds are single-writer — posting from two places at once can lock your feed. Sign out elsewhere to continue safely.</span>
+      <strong>⚠ Writes disabled — this account is signed in elsewhere.</strong>
+      <span> Swarmnero feeds are single-writer. Posting/editing from two devices at once corrupts your feed. Sign out on the other device to continue.</span>
       <button class="dib-close" aria-label="Dismiss">×</button>
     </div>
   `
   banner.querySelector('.dib-close').addEventListener('click', () => banner.remove())
   document.body.appendChild(banner)
   console.warn('[App] Duplicate instance of this account detected on the network')
+}
+
+function evaluateDuplicateInstanceTimeout() {
+  const now = Date.now()
+  let active = false
+  for (const [id, lastSeen] of duplicateInstanceLastSeen) {
+    if (now - lastSeen > DUPLICATE_INSTANCE_TIMEOUT_MS) {
+      duplicateInstanceLastSeen.delete(id)
+    } else {
+      active = true
+    }
+  }
+  if (!active) {
+    document.body.classList.remove('duplicate-instance-active')
+    const banner = document.getElementById('duplicateInstanceBanner')
+    if (banner) banner.remove()
+    if (duplicateInstanceWatcher) {
+      clearInterval(duplicateInstanceWatcher)
+      duplicateInstanceWatcher = null
+    }
+    console.log('[App] Duplicate instance silence confirmed — writes re-enabled')
+  }
 }
 
 // Append the running Pear release length to the header version badge.
@@ -1010,8 +1048,14 @@ async function continueInit(accountManager) {
   console.log('Feed initialized:', feed.swarmId.slice(0, 16) + '...')
 
   // Auto-follow official account for new users
-  // Only if: 1) This is a new account (empty feed), 2) Not already following
-  const isNewAccount = feed.length === 0
+  // Only if: 1) This is a new account (empty feed), 2) Not already following,
+  // 3) NOT an imported account. Imported accounts already have a real profile
+  // and follow list on another device — auto-writing here would collide with
+  // the real data as it replicates in, bricking the Hypercore via single-writer
+  // conflict.
+  const activeAccount = accountManager.accounts.find(a => a.name === accountManager.activeAccount)
+  const wasImported = !!activeAccount?.imported
+  const isNewAccount = feed.length === 0 && !wasImported
   const alreadyFollowing = feed.getFollowing().includes(OFFICIAL_SWARM_ID)
   if (isNewAccount && !alreadyFollowing && feed.swarmId !== OFFICIAL_SWARM_ID) {
     try {
@@ -1022,7 +1066,7 @@ async function continueInit(accountManager) {
     } catch (err) {
       console.error('[App] Error auto-following official account:', err.message)
     }
-  } else if (!isNewAccount) {
+  } else if (!isNewAccount && !wasImported) {
     // Existing-account migration: if they still follow a retired official
     // account, unfollow it and follow the current one. Idempotent — runs once
     // per account once the migration completes.
@@ -1048,7 +1092,8 @@ async function continueInit(accountManager) {
   }
 
   // Auto-save profile with account name for new accounts
-  // This ensures posts show the username immediately without requiring manual profile save
+  // This ensures posts show the username immediately without requiring manual profile save.
+  // Skipped for imported accounts — they already have a real profile replicating in.
   if (isNewAccount) {
     try {
       const accountName = accountManager.activeAccount
@@ -1056,6 +1101,18 @@ async function continueInit(accountManager) {
       await feed.append(createProfileEvent({ name: accountName, swarmId: feed.swarmId }))
     } catch (err) {
       console.error('[App] Error auto-saving profile:', err.message)
+    }
+  }
+
+  // Clear the "imported" flag now that the first post-import launch is done.
+  // Subsequent launches treat this as a normal existing account so the official-
+  // account-follow migration can run if needed.
+  if (wasImported) {
+    try {
+      await accountManager.clearImportedFlag(accountManager.activeAccount)
+      console.log('[App] Cleared imported flag for', accountManager.activeAccount)
+    } catch (err) {
+      console.warn('[App] Could not clear imported flag:', err.message)
     }
   }
 
@@ -1102,7 +1159,7 @@ async function continueInit(accountManager) {
   state.discovery = discovery
   state.discovery.setDataDir(DATA_DIR)
   state.discovery.setFeed(feed)
-  state.discovery.onDuplicateInstance = () => showDuplicateInstanceBanner()
+  state.discovery.onDuplicateInstance = (info) => showDuplicateInstanceBanner(info)
   console.log('Discovery initialized')
 
   // Initialize FoF (after feed is ready)
@@ -1494,7 +1551,7 @@ async function continueInit(accountManager) {
 
     // Reinitialize Discovery for new identity (enabled by default)
     const newDiscovery = new Discovery(newFeed.swarm, newIdentity)
-    newDiscovery.onDuplicateInstance = () => showDuplicateInstanceBanner()
+    newDiscovery.onDuplicateInstance = (info) => showDuplicateInstanceBanner(info)
     state.discovery = newDiscovery
     state.discovery.setDataDir(DATA_DIR)
     state.discovery.setFeed(newFeed)
