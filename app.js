@@ -474,6 +474,23 @@ function showDuplicateInstanceBanner() {
   console.warn('[App] Duplicate instance of this account detected on the network')
 }
 
+// Append the running Pear release length to the header version badge.
+// Silently falls back to the hardcoded version string if Pear APIs are
+// unavailable (e.g. when loaded outside Pear Runtime).
+async function appendReleaseLengthToVersion() {
+  try {
+    if (typeof Pear === 'undefined' || typeof Pear.versions !== 'function') return
+    const v = await Pear.versions()
+    const length = v?.app?.length
+    const el = document.getElementById('versionBadge')
+    if (el && length) {
+      el.textContent = `${el.textContent} (${length})`
+    }
+  } catch (err) {
+    console.warn('[App] appendReleaseLengthToVersion:', err)
+  }
+}
+
 // Pear fetches new releases in the background and caches them, but only
 // applies the new version on the next launch. Listen for update-ready events
 // and show a banner with a Restart button so users can pick up the update
@@ -743,6 +760,10 @@ async function init() {
 
     // Initialize DOM references
     initDom()
+
+    // Append the Pear release length to the version badge so we can confirm
+    // which release is running (e.g. "v0.8.17 (4219)").
+    appendReleaseLengthToVersion()
 
     // Start listening for Pear release updates so we can prompt the user to
     // restart when a new version has been downloaded.

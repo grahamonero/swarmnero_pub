@@ -56,6 +56,35 @@ nav a:hover { color: var(--text); }
   border-radius: 16px;
   image-rendering: -webkit-optimize-contrast;
 }
+.release-badge {
+  margin-top: 20px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.release-badge strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.release-badge .release-length {
+  color: var(--text-dim);
+}
+
+/* App preview screenshot */
+.preview {
+  padding: 40px 0 80px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+}
+.preview-img {
+  max-width: 100%;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  display: block;
+  margin: 0 auto;
+}
 .hero h1 {
   font-size: 48px;
   font-weight: 700;
