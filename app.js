@@ -1107,10 +1107,10 @@ async function continueInit(accountManager) {
 
   // Initialize FoF (after feed is ready)
   const tagIndex = getTagIndex()
-  tagIndex.setDataDir(DATA_DIR)
+  tagIndex.setDataDir(DATA_DIR, identity.pubkeyHex)
   await tagIndex.load()
 
-  const fofCache = new FoFCache(DATA_DIR)
+  const fofCache = new FoFCache(DATA_DIR, { pubkeyHex: identity.pubkeyHex })
   state.fofCache = fofCache
   state.tagIndex = tagIndex
 
@@ -1499,6 +1499,19 @@ async function continueInit(accountManager) {
     state.discovery.setDataDir(DATA_DIR)
     state.discovery.setFeed(newFeed)
     setupDiscoveryCallbacks()
+
+    // Reinitialize tag index and FoF cache with the new account's pubkey so
+    // trending/search only reflect this account's own feed and replication.
+    const newTagIndex = getTagIndex()
+    newTagIndex.setDataDir(DATA_DIR, newIdentity.pubkeyHex)
+    await newTagIndex.load()
+    state.tagIndex = newTagIndex
+    const newFoFCache = new FoFCache(DATA_DIR, { pubkeyHex: newIdentity.pubkeyHex })
+    state.fofCache = newFoFCache
+    const newFoF = new FoF({ feed: newFeed, fofCache: newFoFCache, tagIndex: newTagIndex, dataDir: DATA_DIR })
+    await newFoF.init()
+    state.fof = newFoF
+    newFeed.setFoF(newFoF)
 
     // Update unread badge
     await updateUnreadBadge()
