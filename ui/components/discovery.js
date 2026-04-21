@@ -1594,6 +1594,10 @@ export function setupDiscoveryCallbacks() {
  */
 export function updateDiscoveryProfile() {
   if (state.discovery) {
+    console.log('[App] updateDiscoveryProfile called', {
+      hasProfile: !!state.myProfile,
+      feedSwarmId: state.feed?.swarmId?.slice(0, 12)
+    })
     state.discovery.setProfile(state.myProfile, state.feed?.swarmId)
   }
 }
