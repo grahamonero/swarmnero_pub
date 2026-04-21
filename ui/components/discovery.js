@@ -1550,6 +1550,20 @@ export function setupDiscoveryCallbacks() {
       state.swarmIdToPubkey[peer.swarmId] = peer.pubkey
       state.pubkeyToSwarmId[peer.pubkey] = peer.swarmId
     }
+    // Cache profile data so display name / avatar resolve for peers we don't
+    // directly follow (e.g. followers we discover via Discovery hello).
+    if (peer.pubkey && peer.profile) {
+      if (!state.peerProfiles) state.peerProfiles = {}
+      const existing = state.peerProfiles[peer.pubkey] || {}
+      state.peerProfiles[peer.pubkey] = {
+        ...existing,
+        name: peer.profile.name ?? existing.name,
+        bio: peer.profile.bio ?? existing.bio,
+        avatar: peer.profile.avatar ?? existing.avatar,
+        website: peer.profile.website ?? existing.website
+      }
+      if (state.feed) state.feed.peerProfiles = state.peerProfiles
+    }
     // Detect unfollows: if peer's following list doesn't include us, remove from our followers
     if (peer.following && state.feed && peer.swarmId) {
       const mySwarmId = state.feed.swarmId
