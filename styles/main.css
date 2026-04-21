@@ -6348,6 +6348,60 @@ button:disabled {
   color: #e6edf3;
 }
 
+/* Update-ready banner (fixed bottom, dismissible, offers Restart button) */
+.update-ready-banner {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 720px;
+  width: calc(100% - 48px);
+  background: #0c2d48;
+  border: 1px solid #1f6feb;
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: #e6edf3;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  z-index: 9999;
+}
+.update-ready-banner .urb-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.update-ready-banner strong {
+  color: #79c0ff;
+  white-space: nowrap;
+}
+.update-ready-banner .urb-restart {
+  background: #1f6feb;
+  border: 0;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  margin-left: auto;
+}
+.update-ready-banner .urb-restart:hover {
+  background: #388bfd;
+}
+.update-ready-banner .urb-close {
+  background: transparent;
+  border: 0;
+  color: #8b949e;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.update-ready-banner .urb-close:hover {
+  color: #e6edf3;
+}
+
 /* Timeline filter toggle bar */
 .timeline-toggle-bar {
   position: sticky;

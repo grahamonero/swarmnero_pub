@@ -474,6 +474,49 @@ function showDuplicateInstanceBanner() {
   console.warn('[App] Duplicate instance of this account detected on the network')
 }
 
+// Pear fetches new releases in the background and caches them, but only
+// applies the new version on the next launch. Listen for update-ready events
+// and show a banner with a Restart button so users can pick up the update
+// without waiting for a future relaunch.
+function initUpdateListener() {
+  if (typeof Pear === 'undefined' || typeof Pear.updates !== 'function') return
+  try {
+    const stream = Pear.updates()
+    stream.on('data', (info) => {
+      console.log('[App] Update ready:', info)
+      showUpdateReadyBanner()
+    })
+    stream.on('error', (err) => console.warn('[App] Pear.updates error:', err))
+  } catch (err) {
+    console.warn('[App] Pear.updates unavailable:', err)
+  }
+}
+
+function showUpdateReadyBanner() {
+  if (document.getElementById('updateReadyBanner')) return
+  const banner = document.createElement('div')
+  banner.id = 'updateReadyBanner'
+  banner.className = 'update-ready-banner'
+  banner.innerHTML = `
+    <div class="urb-inner">
+      <strong>↻ Update ready</strong>
+      <span>A new version of Swarmnero is downloaded. Restart to apply.</span>
+      <button class="urb-restart">Restart now</button>
+      <button class="urb-close" aria-label="Dismiss later">×</button>
+    </div>
+  `
+  banner.querySelector('.urb-restart').addEventListener('click', () => {
+    try {
+      Pear.restart()
+    } catch (err) {
+      console.error('[App] Pear.restart failed:', err)
+      alert('Could not restart automatically. Please close and relaunch Swarmnero.')
+    }
+  })
+  banner.querySelector('.urb-close').addEventListener('click', () => banner.remove())
+  document.body.appendChild(banner)
+}
+
 function showHelpModal(type) {
   const modal = document.getElementById('helpModal')
   const titleEl = document.getElementById('helpTitle')
@@ -700,6 +743,10 @@ async function init() {
 
     // Initialize DOM references
     initDom()
+
+    // Start listening for Pear release updates so we can prompt the user to
+    // restart when a new version has been downloaded.
+    initUpdateListener()
 
     // Initialize account manager (handles multi-account and encryption)
     const accountManager = new AccountManager(DATA_DIR)
