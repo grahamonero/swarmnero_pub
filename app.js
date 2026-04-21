@@ -2,7 +2,7 @@
 import { Feed } from './lib/feed.js'
 import { Media } from './lib/media.js'
 import { AccountManager } from './lib/accounts.js'
-import { getLatestProfile, getLatestDiscoveryProfile, countTipsForPost, buildSubaddressToPostMap, createTipReceivedEvent, createFollowEvent, createProfileEvent } from './lib/events.js'
+import { getLatestProfile, getLatestDiscoveryProfile, countTipsForPost, buildSubaddressToPostMap, createTipReceivedEvent, createFollowEvent, createUnfollowEvent, createProfileEvent } from './lib/events.js'
 import { parseSwarmId } from './ui/utils/dom.js'
 
 // UI modules
@@ -38,6 +38,11 @@ import { deriveLocalStorageKey } from './lib/dm-crypto.js'
 
 // Official Swarmnero account - new users auto-follow this account
 const OFFICIAL_SWARM_ID = '9aa8bf64357d4db09ea62aa6ddd771affc161d43624e3d162e1d115af5503e74'
+// Previous official Swarmnero account (rotated 2026-04-20). Existing users
+// still following this will be migrated to the new key on next login.
+const LEGACY_OFFICIAL_SWARM_IDS = [
+  '5f5ef421cd609b2d98d8ef3d11eb53bfb623ac3d8126e4189b1aaead1298ee52'
+]
 
 // Data directory - Pear provides app storage path
 const DATA_DIR = Pear.config.storage || './data'
@@ -1016,6 +1021,29 @@ async function continueInit(accountManager) {
       console.log('[App] Auto-followed official account:', OFFICIAL_SWARM_ID.slice(0, 16) + '...')
     } catch (err) {
       console.error('[App] Error auto-following official account:', err.message)
+    }
+  } else if (!isNewAccount) {
+    // Existing-account migration: if they still follow a retired official
+    // account, unfollow it and follow the current one. Idempotent — runs once
+    // per account once the migration completes.
+    try {
+      const following = feed.getFollowing()
+      const staleOfficials = LEGACY_OFFICIAL_SWARM_IDS.filter(id => following.includes(id))
+      const needsNewOfficial = !following.includes(OFFICIAL_SWARM_ID) && feed.swarmId !== OFFICIAL_SWARM_ID
+      if (staleOfficials.length > 0 || needsNewOfficial) {
+        console.log('[App] Migrating official account follow', { staleOfficials, needsNewOfficial })
+        for (const stale of staleOfficials) {
+          await feed.append(createUnfollowEvent({ swarmId: stale }))
+          await feed.unfollow(stale)
+        }
+        if (needsNewOfficial) {
+          await feed.append(createFollowEvent({ swarmId: OFFICIAL_SWARM_ID }))
+          await feed.follow(OFFICIAL_SWARM_ID)
+          console.log('[App] Auto-followed new official account:', OFFICIAL_SWARM_ID.slice(0, 16) + '...')
+        }
+      }
+    } catch (err) {
+      console.error('[App] Official account migration failed:', err.message)
     }
   }
 
