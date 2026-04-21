@@ -3117,6 +3117,29 @@ button:disabled {
 }
 
 /* Wallet Danger Zone (inside collapsible) */
+.wallet-heights {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+}
+.wallet-height-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+.wallet-height-row .label {
+  color: #8b949e;
+}
+.wallet-height-row .value {
+  color: #e6edf3;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .wallet-danger-zone {
   display: flex;
   gap: 10px;

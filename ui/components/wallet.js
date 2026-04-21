@@ -406,6 +406,13 @@ async function renderUnlockedState(accountName) {
   const address = await wallet.getPrimaryAddress(accountName)
   const shortAddress = address ? `${address.slice(0, 16)}...${address.slice(-8)}` : ''
 
+  // Meta for the Settings submenu
+  const unlockedMeta = await wallet.getWalletMeta(accountName)
+  const restoreHeightDisplay = (unlockedMeta?.restoreHeight ?? 0).toLocaleString()
+  const syncHeightDisplay = unlockedMeta?.lastSyncedHeight != null
+    ? unlockedMeta.lastSyncedHeight.toLocaleString()
+    : 'Not synced yet'
+
   // Format node info for display
   let nodeDisplay = ''
   if (nodeInfo) {
@@ -473,6 +480,16 @@ async function renderUnlockedState(accountName) {
           <span class="chevron">&#9654;</span> Settings
         </h4>
         <div class="collapsible-content">
+          <div class="wallet-heights">
+            <div class="wallet-height-row">
+              <span class="label">Restore height:</span>
+              <span class="value">${restoreHeightDisplay}</span>
+            </div>
+            <div class="wallet-height-row">
+              <span class="label">Current sync height:</span>
+              <span class="value">${syncHeightDisplay}</span>
+            </div>
+          </div>
           <div class="wallet-danger-zone">
             <button id="showSeedBtn" class="btn danger-btn small">Show Seed</button>
             <button id="deleteWalletBtn" class="btn danger-btn small">Delete Wallet</button>
