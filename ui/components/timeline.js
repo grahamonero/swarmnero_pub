@@ -307,6 +307,7 @@ export async function renderPosts(posts, refreshUI) {
           const hasReplyMedia = reply.media && reply.media.length > 0
           const replyCounts = getInteractionCounts(posts, reply.pubkey, reply.timestamp)
           const replyReposted = hasReposted(posts, myPubkey, reply.pubkey, reply.timestamp)
+          const replyLiked = hasLiked(posts, myPubkey, reply.pubkey, reply.timestamp)
           const replySupporterManager = getSupporterManager()
           const replyIsSupporter = replySupporterManager?.isListed(reply.pubkey)
           const replySupporterBadge = replyIsSupporter ? '<span class="supporter-badge" title="Supporter"><span class="badge-icon">★</span>Supporter</span>' : ''
@@ -329,6 +330,10 @@ export async function renderPosts(posts, refreshUI) {
               <div class="reply-content">${renderMarkdown(reply.content || '')}</div>
               ${hasReplyMedia ? `<div class="reply-media" data-media-pubkey="${safePubkey}" data-media-ts="${safeTs}"></div>` : ''}
               <div class="reply-actions">
+                ${!isOwnReply ? `<button class="action-btn like-btn reply-like-btn ${replyLiked ? 'liked' : ''}" data-pubkey="${safePubkey}" data-timestamp="${safeTs}" title="Like">
+                  <span class="action-icon">${replyLiked ? '\u2764' : '\u2661'}</span>
+                  <span class="action-count">${replyCounts.likes || ''}</span>
+                </button>` : ''}
                 <button class="action-btn reply-repost-btn ${replyReposted ? 'reposted' : ''}" data-pubkey="${safePubkey}" data-timestamp="${safeTs}" title="Repost">
                   <span class="action-icon">\u21BB</span>
                   <span class="action-count">${replyCounts.reposts || ''}</span>
