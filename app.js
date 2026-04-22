@@ -36,6 +36,24 @@ import * as paywall from './lib/paywall.js'
 import * as paywallStorage from './lib/paywall-storage.js'
 import { deriveLocalStorageKey } from './lib/dm-crypto.js'
 import { loadPeerProfiles } from './lib/peer-profile-cache.js'
+import { rebuildPublicSite } from './lib/public-site.js'
+
+// Debounced rebuild of the public hyper-site so multiple rapid writes
+// (e.g. posting several events in a row) coalesce into one regeneration.
+let _publicSiteRebuildTimer = null
+export function schedulePublicSiteRebuild() {
+  if (_publicSiteRebuildTimer) clearTimeout(_publicSiteRebuildTimer)
+  _publicSiteRebuildTimer = setTimeout(() => {
+    _publicSiteRebuildTimer = null
+    if (!state.feed || !state.media || !state.identity) return
+    rebuildPublicSite({
+      feed: state.feed,
+      media: state.media,
+      identity: state.identity,
+      dataDir: DATA_DIR
+    }).catch(err => console.warn('[PublicSite] rebuild failed:', err.message))
+  }, 2000)
+}
 
 // Official Swarmnero account - new users auto-follow this account
 const OFFICIAL_SWARM_ID = '9aa8bf64357d4db09ea62aa6ddd771affc161d43624e3d162e1d115af5503e74'
@@ -1636,6 +1654,10 @@ async function continueInit(accountManager) {
   await refreshUI()
 
   console.log('Swarmnero ready!')
+
+  // Regenerate the public hyper-site once on startup so offline-edited content
+  // (or first-run of this feature) reflects current feed state.
+  schedulePublicSiteRebuild()
 
   // Start sync status polling for header indicator (always runs for supporters)
   startSyncStatusPolling()

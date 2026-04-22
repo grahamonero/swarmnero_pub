@@ -6454,6 +6454,49 @@ body.duplicate-instance-active .paywall-unlock-btn {
   color: #e6edf3;
 }
 
+/* Public hyper-site section in profile settings */
+.profile-public-site-section {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #161b22;
+}
+.profile-section-heading {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  color: #e6edf3;
+}
+.profile-section-help {
+  margin: 0 0 12px;
+  color: #8b949e;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.profile-public-site-toggle {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.profile-public-site-toggle input { cursor: pointer; }
+.profile-public-site-url {
+  display: flex; gap: 8px; align-items: center;
+  padding: 8px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+}
+.profile-public-site-url code {
+  flex: 1;
+  font-size: 0.75rem;
+  color: #79c0ff;
+  word-break: break-all;
+  background: transparent;
+  padding: 0;
+}
+.profile-public-site-url.disabled { opacity: 0.5; }
+
 /* Timeline filter toggle bar */
 .timeline-toggle-bar {
   position: sticky;

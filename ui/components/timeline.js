@@ -25,6 +25,7 @@ import { isPaywalledPost } from '../../lib/events.js'
 import { getUnlockedContent, isPostUnlocked } from '../../lib/paywall.js'
 import { showPaywallUnlockModal } from './paywall-modal.js'
 import { isAuthorOnline } from '../utils/format.js'
+import { schedulePublicSiteRebuild } from '../../app.js'
 
 // Callback for author clicks (set by app.js)
 let onAuthorClickCallback = null
@@ -574,6 +575,7 @@ export async function renderPosts(posts, refreshUI) {
       btn.disabled = true
       try {
         await state.feed.append(createDeleteEvent({ postTimestamp: parseInt(btn.dataset.timestamp) }))
+        schedulePublicSiteRebuild()
         await refreshUI()
       } catch (err) {
         alert('Error deleting: ' + err.message)

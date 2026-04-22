@@ -10,6 +10,7 @@ import * as wallet from '../../lib/wallet.js'
 import { extractHashtags } from '../../lib/tag-extractor.js'
 import { createPaywalledPost, persistContentKey, cacheUnlockedContent } from '../../lib/paywall.js'
 import { pushPanel } from './panel.js'
+import { schedulePublicSiteRebuild } from '../../app.js'
 
 // Expanded composer pending media/files
 let expPendingMedia = []
@@ -301,6 +302,8 @@ async function createExpandedPost(refreshUI) {
         subaddressIndex: subaddress_index
       }))
     }
+
+    schedulePublicSiteRebuild()
 
     clearExpandedComposer()
     hideExpandedComposer()

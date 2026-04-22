@@ -9,6 +9,8 @@ import { getFollowingForPubkey, getFollowersCount, showFollowingModal, showFollo
 import { getSupporterManager } from '../../lib/supporter-manager.js'
 import { runFeedBackupPurchase } from './feed-backup.js'
 import { escapeHtml } from '../utils/dom.js'
+import { schedulePublicSiteRebuild } from '../../app.js'
+import { publicSiteStorage } from '../../lib/public-site.js'
 
 // Reserved display names (case-insensitive). Value is the swarmId of the sole
 // account permitted to use the name, or null if no account may claim it.
@@ -143,6 +145,7 @@ export async function updateProfileWithNewSubaddress() {
       moneroAddress: address,
       swarmId: state.feed.swarmId
     }))
+    schedulePublicSiteRebuild()
 
     console.log('[Profile] Updated profile with new subaddress')
 
@@ -205,6 +208,7 @@ export async function updateProfileForm() {
   // Update sync section for supporters
   renderProfileSyncSection()
   renderProfileRenewalBanner()
+  renderProfilePublicSiteSection()
 }
 
 /**
@@ -325,6 +329,8 @@ export function initProfile(refreshUI) {
         moneroAddress: dom.profileMoneroAddress?.value.trim() || null,
         swarmId: state.feed.swarmId
       }))
+
+      schedulePublicSiteRebuild()
 
       // Clear pending avatar after save
       pendingAvatar = null
@@ -721,6 +727,68 @@ export function renderProfileRenewalBanner() {
           if (supportBtn) supportBtn.click()
         }, 100)
       }, 100)
+    })
+  }
+}
+
+/**
+ * Render the "Public hyper-site" section in profile settings.
+ *
+ * Shows the hyper:// URL that renders the user's profile + posts in any
+ * hyper-aware browser (PearBrowser, Agregore). Opt-out toggle disables
+ * regeneration and wipes the drive's public/ folder on next save.
+ */
+export function renderProfilePublicSiteSection() {
+  const section = document.getElementById('profilePublicSiteSection')
+  if (!section) return
+
+  const pubkey = state.identity?.pubkeyHex
+  const driveKey = state.media?.driveKey
+  if (!pubkey || !driveKey) {
+    section.innerHTML = ''
+    return
+  }
+
+  const dataDir = (typeof Pear !== 'undefined' && Pear.config?.storage) || null
+  const enabled = publicSiteStorage.isEnabled(dataDir, pubkey)
+  const hyperUrl = `hyper://${driveKey}/public/profile.html`
+
+  section.innerHTML = `
+    <h4 class="profile-section-heading">Public hyper-site</h4>
+    <p class="profile-section-help">
+      Your profile + last 100 public posts are published as a static site in your Hyperdrive.
+      Anyone with a hyper-aware browser (PearBrowser, Agregore) can read it at the URL below —
+      shareable outside Swarmnero. Paywalled post bodies and replies are not included.
+    </p>
+    <label class="profile-public-site-toggle">
+      <input type="checkbox" id="publicSiteToggle" ${enabled ? 'checked' : ''}>
+      <span>Publish public hyper-site</span>
+    </label>
+    <div class="profile-public-site-url ${enabled ? '' : 'disabled'}">
+      <code id="publicSiteUrl">${escapeHtml(hyperUrl)}</code>
+      <button type="button" id="copyPublicSiteUrlBtn" class="btn-small" ${enabled ? '' : 'disabled'}>Copy</button>
+    </div>
+  `
+
+  const toggle = document.getElementById('publicSiteToggle')
+  if (toggle) {
+    toggle.addEventListener('change', async () => {
+      publicSiteStorage.setEnabled(dataDir, pubkey, toggle.checked)
+      schedulePublicSiteRebuild()
+      renderProfilePublicSiteSection()
+    })
+  }
+
+  const copyBtn = document.getElementById('copyPublicSiteUrlBtn')
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(hyperUrl)
+        copyBtn.textContent = 'Copied!'
+        setTimeout(() => { copyBtn.textContent = 'Copy' }, 2000)
+      } catch (err) {
+        alert('Copy failed: ' + err.message)
+      }
     })
   }
 }
