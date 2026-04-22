@@ -28,6 +28,10 @@ import { isAuthorOnline } from '../utils/format.js'
 import { schedulePublicSiteRebuild } from '../../app.js'
 import { MAX_PEER_FILE_BYTES } from '../../lib/media.js'
 
+// Even for direct follows, don't auto-pull files larger than this — require
+// an explicit "click to load" to protect followers on metered connections.
+const AUTO_LOAD_THRESHOLD_BYTES = 100 * 1024 * 1024 // 100 MB
+
 // Is this post/reply/repost author someone the viewer directly follows?
 // Used to skip the peer-file size cap for trusted sources (direct follows)
 // while keeping the 25 MB cap in place for FoF content.
@@ -39,40 +43,66 @@ function isAuthorFollowed(authorPubkey) {
   return state.feed.peers?.has?.(swarmId) || false
 }
 
-// Render one media item into a container. When the file exceeds
-// MAX_PEER_FILE_BYTES and the author isn't followed, shows a "Large file —
-// click to load" badge that retries with noSizeCap on click.
+// Render one media item into a container.
+//   - Direct follows: auto-load up to 100 MB, show "click to load" badge above
+//   - FoF / untrusted:   auto-load up to 25 MB, show badge above
+// The badge is the same in both cases: `📎 Large file (X MB) — click to load`.
 async function renderMediaInto(container, authorPubkey, m) {
   const trusted = isAuthorFollowed(authorPubkey)
+  const autoThreshold = trusted ? AUTO_LOAD_THRESHOLD_BYTES : MAX_PEER_FILE_BYTES
+
   try {
+    // Cheap metadata probe first — avoids downloading a huge file only to
+    // realize we should have gated it behind a badge.
+    const info = await state.media.getPeerEntryInfo(m.driveKey, m.path).catch(() => null)
+
+    if (info && info.size > autoThreshold) {
+      renderLargeMediaBadge(container, m, info.size)
+      return
+    }
+
     const url = await state.media.getImageUrl(m.driveKey, m.path, { noSizeCap: trusted })
     if (url) {
       appendMediaElement(container, m, url)
       return
     }
-    if (trusted) return // getImageUrl returned null for reasons other than cap
-    const info = await state.media.getPeerEntryInfo(m.driveKey, m.path)
-    if (info && info.size > MAX_PEER_FILE_BYTES) {
-      const btn = document.createElement('button')
-      btn.className = 'large-media-badge'
-      btn.textContent = `📎 Large file (${formatFileSize(info.size)}) — click to load`
-      btn.addEventListener('click', async () => {
-        btn.disabled = true
-        btn.textContent = 'Loading…'
-        const forceUrl = await state.media.getImageUrl(m.driveKey, m.path, { noSizeCap: true })
-        if (forceUrl) {
-          btn.remove()
-          appendMediaElement(container, m, forceUrl)
-        } else {
-          btn.textContent = 'Failed to load'
-          btn.disabled = false
-        }
-      })
-      container.appendChild(btn)
+
+    // Fallback: size unknown (probe failed) and fetch returned null. If the
+    // author isn't trusted, the cap may have blocked it — show the badge so
+    // the user can retry with consent.
+    if (!trusted) {
+      const info2 = await state.media.getPeerEntryInfo(m.driveKey, m.path).catch(() => null)
+      if (info2 && info2.size > MAX_PEER_FILE_BYTES) {
+        renderLargeMediaBadge(container, m, info2.size)
+      }
     }
   } catch (err) {
     console.error('Error loading media:', err)
   }
+}
+
+function renderLargeMediaBadge(container, m, size) {
+  const btn = document.createElement('button')
+  btn.className = 'large-media-badge'
+  btn.textContent = `📎 Large file (${formatFileSize(size)}) — click to load`
+  btn.addEventListener('click', async () => {
+    btn.disabled = true
+    btn.textContent = 'Loading…'
+    try {
+      const url = await state.media.getImageUrl(m.driveKey, m.path, { noSizeCap: true })
+      if (url) {
+        btn.remove()
+        appendMediaElement(container, m, url)
+      } else {
+        btn.textContent = 'Failed to load'
+        btn.disabled = false
+      }
+    } catch (err) {
+      btn.textContent = 'Failed to load'
+      btn.disabled = false
+    }
+  })
+  container.appendChild(btn)
 }
 
 function appendMediaElement(container, m, url) {
