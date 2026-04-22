@@ -245,14 +245,15 @@ export class SyncManager {
   }
 
   /**
-   * Get all active accounts (for feed following on startup)
-   * Excludes accounts that have been capped or have lapsed.
-   * @returns {Array<{pubkey, swarmId}>}
+   * Get all active accounts (for feed following on startup).
+   * overCap accounts ARE included so we keep serving their existing backup;
+   * caller is expected to pause downloads on them via syncFeed.setPaused().
+   * @returns {Array<{pubkey, swarmId, overCap}>}
    */
   getActiveAccounts() {
     return Object.entries(this.accounts)
-      .filter(([_, a]) => a.active && !a.overCap && a.expiresAt > Date.now())
-      .map(([pubkey, a]) => ({ pubkey, swarmId: a.swarmId }))
+      .filter(([_, a]) => a.active && a.expiresAt > Date.now())
+      .map(([pubkey, a]) => ({ pubkey, swarmId: a.swarmId, overCap: !!a.overCap }))
   }
 
   /**
@@ -296,19 +297,34 @@ export class SyncManager {
   }
 
   /**
-   * Mark an account as having been capped (so we don't re-follow it on restart).
-   * Deactivates and flags it — the account stays in the DB so the owner can
-   * see status, but no data is replicated until they re-register fresh.
+   * Mark an account as having hit its storage cap. Keeps `active: true` so
+   * the paid subscription period still applies and existing backup keeps
+   * serving — only new block downloads are paused (caller must also call
+   * syncFeed.setPaused(swarmId, true)).
    * @param {string} pubkey - Supporter's pubkey
    */
   markOverCap(pubkey) {
     const account = this.accounts[pubkey]
     if (!account) return false
+    if (account.overCap) return true // already flagged
     account.overCap = true
     account.overCapAt = Date.now()
-    account.active = false
     this.save()
-    console.log(`[SyncManager] Marked over-cap: ${pubkey.slice(0, 16)}...`)
+    console.log(`[SyncManager] Marked over-cap (backup paused, subscription still active): ${pubkey.slice(0, 16)}...`)
+    return true
+  }
+
+  /**
+   * Clear the overCap flag — typically called after a renewal so the account
+   * resumes accepting new blocks. Does not reset storageUsedBytes.
+   */
+  clearOverCap(pubkey) {
+    const account = this.accounts[pubkey]
+    if (!account || !account.overCap) return false
+    account.overCap = false
+    account.overCapAt = null
+    this.save()
+    console.log(`[SyncManager] Cleared over-cap: ${pubkey.slice(0, 16)}...`)
     return true
   }
 
@@ -322,7 +338,8 @@ export class SyncManager {
   canReactivateViaPoll(pubkey) {
     const account = this.accounts[pubkey]
     if (!account) return false
-    if (account.overCap) return false
+    // overCap no longer disqualifies — subscription stays valid even when
+    // new blocks are paused, so the account can still reactivate normally.
     if (account.expiresAt && account.expiresAt < Date.now()) return false
     return true
   }
@@ -390,6 +407,8 @@ export class SyncManager {
       expiresAt: account.expiresAt,
       storageUsed: account.storageUsedBytes,
       storageLimit: STORAGE_CAP_BYTES,
+      overCap: !!account.overCap,
+      overCapAt: account.overCapAt || null,
       paymentVerifiedAt: account.paymentVerifiedAt
     }
   }

@@ -87,9 +87,12 @@ async function main() {
   const activeAccounts = syncManager.getActiveAccounts()
   console.log(`Following ${activeAccounts.length} active supporter feeds...`)
 
-  for (const { swarmId } of activeAccounts) {
+  for (const { swarmId, overCap } of activeAccounts) {
     try {
       await syncFeed.follow(swarmId)
+      // Over-cap accounts are still followed (so existing backup serves) but
+      // we pause new block downloads until they drop below the cap.
+      if (overCap) syncFeed.setPaused(swarmId, true)
     } catch (err) {
       console.error(`Error following ${swarmId.slice(0, 16)}:`, err.message)
     }
@@ -162,12 +165,13 @@ async function main() {
 
       if (syncManager.isOverStorageCap(pubkey)) {
         const mb = (bytes / 1024 / 1024).toFixed(1)
-        console.warn(`[Storage] ENFORCE cap for ${pubkey.slice(0, 16)}... (${mb}MB) — clearing and unfollowing`)
-        try {
-          await syncFeed.clearStorage(swarmId)
-        } catch (err) {
-          console.error(`[Storage] clearStorage failed for ${pubkey.slice(0, 16)}:`, err.message)
+        // Pause new block downloads but keep the existing backup intact so
+        // followers of this supporter still have offline availability.
+        // Subscription stays active through its paid period.
+        if (!syncManager.getAccount(pubkey)?.overCap) {
+          console.warn(`[Storage] Cap hit for ${pubkey.slice(0, 16)}... (${mb}MB) — pausing new block downloads`)
         }
+        syncFeed.setPaused(swarmId, true)
         syncManager.markOverCap(pubkey)
       }
     }

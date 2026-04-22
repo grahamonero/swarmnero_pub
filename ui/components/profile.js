@@ -565,12 +565,31 @@ export function renderProfileSyncSection() {
     const storagePct = Math.min(100, Math.round((storageUsed / storageLimit) * 100))
     const lastDownload = status.lastDownloadAt ? formatRelativeTime(status.lastDownloadAt) : null
 
+    // Storage state banners:
+    //   overCap → red "paused, existing backup still served"
+    //   >= 80%  → amber "approaching cap"
+    let storageBanner = ''
+    if (status.overCap) {
+      storageBanner = `
+        <div class="sync-storage-banner sync-storage-banner-paused">
+          <strong>Backup paused — 100 MB cap reached.</strong>
+          <p>Your existing backup is still served to followers. New posts stop being backed up until the cap drops or your subscription renews. Subscription is still active${expiryStr ? ` through ${expiryStr}` : ''}.</p>
+        </div>`
+    } else if (storagePct >= 80) {
+      storageBanner = `
+        <div class="sync-storage-banner sync-storage-banner-warn">
+          <strong>Feed backup approaching limit (${storagePct}%).</strong>
+          <p>When you hit 100 MB, new posts stop being backed up. Existing backup keeps serving followers.</p>
+        </div>`
+    }
+
     section.innerHTML = `
       <div class="profile-sync-info">
         <h4>Feed Backup</h4>
         <div class="sync-status-row">
           <span class="sync-status-badge ${display.cls}">${display.label}</span>
         </div>
+        ${storageBanner}
         <div class="sync-detail-row">
           <span class="sync-detail-label">Posts backed up</span>
           <span class="sync-detail-value">${blockCount}</span>
@@ -586,7 +605,7 @@ export function renderProfileSyncSection() {
           <span class="sync-detail-value">${formatBytes(storageUsed)} / ${formatBytes(storageLimit)}</span>
         </div>
         <div class="sync-storage-bar">
-          <div class="sync-storage-fill" style="width: ${storagePct}%"></div>
+          <div class="sync-storage-fill ${status.overCap ? 'paused' : storagePct >= 80 ? 'warn' : ''}" style="width: ${storagePct}%"></div>
         </div>
         ${expiryStr ? `<p class="hint">Expires: ${expiryStr}</p>` : ''}
         <p class="hint">Your posts are available 24/7 even when you're offline.</p>

@@ -4308,6 +4308,34 @@ button:disabled {
   background: linear-gradient(90deg, #3fb950 0%, #58a6ff 100%);
   transition: width 0.3s;
 }
+.sync-storage-fill.warn {
+  background: linear-gradient(90deg, #d29922 0%, #e8a33d 100%);
+}
+.sync-storage-fill.paused {
+  background: linear-gradient(90deg, #f85149 0%, #ff7b72 100%);
+}
+
+.sync-storage-banner {
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin: 10px 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.sync-storage-banner strong { display: block; margin-bottom: 4px; }
+.sync-storage-banner p { margin: 0; color: #8b949e; }
+.sync-storage-banner-warn {
+  background: rgba(210, 153, 34, 0.1);
+  border: 1px solid #d29922;
+  color: #f0b429;
+}
+.sync-storage-banner-warn p { color: #c9a94a; }
+.sync-storage-banner-paused {
+  background: rgba(248, 81, 73, 0.12);
+  border: 1px solid #f85149;
+  color: #ff7b72;
+}
+.sync-storage-banner-paused p { color: #e69a95; }
 
 /* Supporter QR code */
 .supporter-qr-container {

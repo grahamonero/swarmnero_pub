@@ -76,8 +76,12 @@ export class SyncFeed {
       })
     }
 
-    // Download all blocks eagerly so we can serve them to other peers
-    peerCore.download({ start: 0, end: -1 })
+    // Download all blocks eagerly so we can serve them to other peers.
+    // If paused (account hit storage cap), skip the initial bulk download
+    // but still follow the peer so existing blocks remain served.
+    if (!peerCore._pausedDownload) {
+      peerCore.download({ start: 0, end: -1 })
+    }
 
     // Track download events to know when blocks arrive
     peerCore.on('download', () => {
@@ -88,9 +92,11 @@ export class SyncFeed {
       }
     })
 
-    // Re-download on new data
+    // Re-download on new data — only when not paused
     peerCore.on('append', () => {
-      peerCore.download({ start: 0, end: -1 })
+      if (!peerCore._pausedDownload) {
+        peerCore.download({ start: 0, end: -1 })
+      }
       const stats = this.syncStats.get(swarmIdHex)
       if (stats) {
         stats.lastDownloadAt = Date.now()
@@ -113,6 +119,24 @@ export class SyncFeed {
 
     console.log(`[SyncFeed] Following ${swarmIdHex.slice(0, 16)}...`)
     return peerCore
+  }
+
+  /**
+   * Pause or resume downloading new blocks for a supporter. Used when an
+   * account hits its storage cap — we keep serving existing blocks but stop
+   * downloading anything new until the account renews or drops under cap.
+   * Does not unfollow; existing data remains available to peers.
+   * @param {string} swarmIdHex
+   * @param {boolean} paused
+   */
+  setPaused(swarmIdHex, paused) {
+    const peerCore = this.peers.get(swarmIdHex)
+    if (!peerCore) return
+    peerCore._pausedDownload = !!paused
+    if (!paused) {
+      // Resuming — kick off a fresh bulk download to catch up
+      try { peerCore.download({ start: 0, end: -1 }) } catch {}
+    }
   }
 
   /**
