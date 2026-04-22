@@ -547,9 +547,11 @@ async function appendReleaseLengthToVersion() {
     const v = await Pear.versions()
     const length = v?.app?.length
     const el = document.getElementById('versionBadge')
-    if (el && length) {
-      el.textContent = `${el.textContent} (${length})`
-    }
+    if (!el || !length) return
+    // Idempotent — strip any previously-appended `(nnnn)` before re-appending,
+    // so multiple invocations can't accumulate duplicate release tags.
+    const base = el.textContent.replace(/\s*\(\d+\)\s*$/, '')
+    el.textContent = `${base} (${length})`
   } catch (err) {
     console.warn('[App] appendReleaseLengthToVersion:', err)
   }
