@@ -743,7 +743,8 @@ export function renderProfilePublicSiteSection() {
   if (!section) return
 
   const pubkey = state.identity?.pubkeyHex
-  const driveKey = state.media?.driveKey
+  const publicDrive = state.publicSiteDrive
+  const driveKey = publicDrive?.key ? Array.from(publicDrive.key).map(b => b.toString(16).padStart(2, '0')).join('') : null
   if (!pubkey || !driveKey) {
     section.innerHTML = ''
     return

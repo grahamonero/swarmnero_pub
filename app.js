@@ -36,7 +36,9 @@ import * as paywall from './lib/paywall.js'
 import * as paywallStorage from './lib/paywall-storage.js'
 import { deriveLocalStorageKey } from './lib/dm-crypto.js'
 import { loadPeerProfiles } from './lib/peer-profile-cache.js'
-import { rebuildPublicSite } from './lib/public-site.js'
+import { rebuildPublicSite, cleanLegacyPublicSiteFromMedia } from './lib/public-site.js'
+import Hyperdrive from 'hyperdrive'
+import b4a from 'b4a'
 
 // Debounced rebuild of the public hyper-site so multiple rapid writes
 // (e.g. posting several events in a row) coalesce into one regeneration.
@@ -45,10 +47,10 @@ export function schedulePublicSiteRebuild() {
   if (_publicSiteRebuildTimer) clearTimeout(_publicSiteRebuildTimer)
   _publicSiteRebuildTimer = setTimeout(() => {
     _publicSiteRebuildTimer = null
-    if (!state.feed || !state.media || !state.identity) return
+    if (!state.feed || !state.publicSiteDrive || !state.identity) return
     rebuildPublicSite({
       feed: state.feed,
-      media: state.media,
+      drive: state.publicSiteDrive,
       identity: state.identity,
       dataDir: DATA_DIR
     }).catch(err => console.warn('[PublicSite] rebuild failed:', err.message))
@@ -1149,6 +1151,20 @@ async function continueInit(accountManager) {
   await media.init()
   console.log('Media initialized:', media.driveKey.slice(0, 16) + '...')
 
+  // Dedicated Hyperdrive for the public hyper-site so hyper-browsers don't
+  // enumerate the user's uploaded media (images/videos/files) when someone
+  // browses the drive root.
+  const publicSiteDrive = new Hyperdrive(feed.store.namespace('public-site'))
+  await publicSiteDrive.ready()
+  feed.swarm.join(publicSiteDrive.discoveryKey)
+  await feed.swarm.flush()
+  state.publicSiteDrive = publicSiteDrive
+  console.log('Public-site drive initialized:', b4a.toString(publicSiteDrive.key, 'hex').slice(0, 16) + '...')
+
+  // One-time migration: remove the legacy public-site files that older
+  // versions wrote into the media drive. Non-blocking; failures don't matter.
+  cleanLegacyPublicSiteFromMedia(media).catch(() => {})
+
   // Store in state
   initState(identity, feed, media)
 
@@ -1414,6 +1430,11 @@ async function continueInit(accountManager) {
     }
 
     // Reset state
+    if (state.publicSiteDrive) {
+      try { state.feed?.swarm?.leave(state.publicSiteDrive.discoveryKey) } catch {}
+      try { await state.publicSiteDrive.close() } catch {}
+      state.publicSiteDrive = null
+    }
     state.feed = null
     state.media = null
     state.dm = null
@@ -1506,6 +1527,11 @@ async function continueInit(accountManager) {
     stopSyncStatusPolling()
 
     // Clear state references
+    if (state.publicSiteDrive) {
+      try { state.feed?.swarm?.leave(state.publicSiteDrive.discoveryKey) } catch {}
+      try { await state.publicSiteDrive.close() } catch {}
+      state.publicSiteDrive = null
+    }
     state.feed = null
     state.media = null
     state.dm = null
@@ -1563,6 +1589,14 @@ async function continueInit(accountManager) {
 
     const newMedia = new Media(newFeed.store, newFeed.swarm)
     await newMedia.init()
+
+    // Fresh public-site Hyperdrive for the new account.
+    const newPublicSiteDrive = new Hyperdrive(newFeed.store.namespace('public-site'))
+    await newPublicSiteDrive.ready()
+    newFeed.swarm.join(newPublicSiteDrive.discoveryKey)
+    await newFeed.swarm.flush()
+    state.publicSiteDrive = newPublicSiteDrive
+    cleanLegacyPublicSiteFromMedia(newMedia).catch(() => {})
 
     // Update state
     initState(newIdentity, newFeed, newMedia)
