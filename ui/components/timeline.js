@@ -30,7 +30,7 @@ import { MAX_PEER_FILE_BYTES } from '../../lib/media.js'
 
 // Even for direct follows, don't auto-pull files larger than this — require
 // an explicit "click to load" to protect followers on metered connections.
-const AUTO_LOAD_THRESHOLD_BYTES = 100 * 1024 * 1024 // 100 MB
+const AUTO_LOAD_THRESHOLD_BYTES = 25 * 1024 * 1024 // 25 MB
 
 // Is this post/reply/repost author someone the viewer directly follows?
 // Used to skip the peer-file size cap for trusted sources (direct follows)
