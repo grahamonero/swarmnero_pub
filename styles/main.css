@@ -6482,6 +6482,44 @@ body.duplicate-instance-active .paywall-unlock-btn {
   color: #e6edf3;
 }
 
+/* Oversize media preview: thumbnail + "click to load" badge */
+.large-media-preview {
+  position: relative;
+  display: inline-block;
+  margin-top: 8px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #161b22;
+  max-width: 100%;
+}
+.large-media-thumb {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  max-height: 240px;
+  object-fit: cover;
+}
+.large-media-play-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, calc(-50% - 22px));
+  font-size: 2.5rem;
+  color: rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+.large-media-preview .large-media-badge {
+  display: block;
+  margin: 0;
+  border-radius: 0;
+  border: 0;
+  border-top: 1px solid #30363d;
+  width: 100%;
+  text-align: center;
+}
+
 /* "Large file — click to load" badge for oversize FoF media */
 .large-media-badge {
   display: inline-flex;

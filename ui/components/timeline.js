@@ -82,6 +82,25 @@ async function renderMediaInto(container, authorPubkey, m) {
 }
 
 function renderLargeMediaBadge(container, m, size) {
+  // If the uploader generated a thumbnail at upload time, show it as a preview
+  // frame so the follower can see what they're choosing to download.
+  const wrapper = document.createElement('div')
+  wrapper.className = 'large-media-preview'
+
+  if (m.thumb && typeof m.thumb === 'string' && m.thumb.startsWith('data:image/')) {
+    const thumbImg = document.createElement('img')
+    thumbImg.src = m.thumb
+    thumbImg.className = 'large-media-thumb'
+    thumbImg.alt = 'preview'
+    wrapper.appendChild(thumbImg)
+    if (m.type === 'video' || m.mimeType?.startsWith('video/')) {
+      const playOverlay = document.createElement('span')
+      playOverlay.className = 'large-media-play-overlay'
+      playOverlay.textContent = '▶'
+      wrapper.appendChild(playOverlay)
+    }
+  }
+
   const btn = document.createElement('button')
   btn.className = 'large-media-badge'
   btn.textContent = `📎 Large file (${formatFileSize(size)}) — click to load`
@@ -91,7 +110,7 @@ function renderLargeMediaBadge(container, m, size) {
     try {
       const url = await state.media.getImageUrl(m.driveKey, m.path, { noSizeCap: true })
       if (url) {
-        btn.remove()
+        wrapper.remove()
         appendMediaElement(container, m, url)
       } else {
         btn.textContent = 'Failed to load'
@@ -102,7 +121,8 @@ function renderLargeMediaBadge(container, m, size) {
       btn.disabled = false
     }
   })
-  container.appendChild(btn)
+  wrapper.appendChild(btn)
+  container.appendChild(wrapper)
 }
 
 function appendMediaElement(container, m, url) {
