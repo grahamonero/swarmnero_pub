@@ -751,7 +751,7 @@ export function renderProfilePublicSiteSection() {
 
   const dataDir = (typeof Pear !== 'undefined' && Pear.config?.storage) || null
   const enabled = publicSiteStorage.isEnabled(dataDir, pubkey)
-  const hyperUrl = `hyper://${driveKey}/public/profile.html`
+  const hyperUrl = `hyper://${driveKey}/`
 
   section.innerHTML = `
     <h4 class="profile-section-heading">Public hyper-site</h4>
