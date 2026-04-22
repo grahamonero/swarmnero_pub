@@ -26,6 +26,86 @@ import { getUnlockedContent, isPostUnlocked } from '../../lib/paywall.js'
 import { showPaywallUnlockModal } from './paywall-modal.js'
 import { isAuthorOnline } from '../utils/format.js'
 import { schedulePublicSiteRebuild } from '../../app.js'
+import { MAX_PEER_FILE_BYTES } from '../../lib/media.js'
+
+// Is this post/reply/repost author someone the viewer directly follows?
+// Used to skip the peer-file size cap for trusted sources (direct follows)
+// while keeping the 25 MB cap in place for FoF content.
+function isAuthorFollowed(authorPubkey) {
+  if (!authorPubkey || !state.feed || !state.identity) return false
+  if (authorPubkey === state.identity.pubkeyHex) return true
+  const swarmId = state.pubkeyToSwarmId?.[authorPubkey]
+  if (!swarmId) return false
+  return state.feed.peers?.has?.(swarmId) || false
+}
+
+// Render one media item into a container. When the file exceeds
+// MAX_PEER_FILE_BYTES and the author isn't followed, shows a "Large file —
+// click to load" badge that retries with noSizeCap on click.
+async function renderMediaInto(container, authorPubkey, m) {
+  const trusted = isAuthorFollowed(authorPubkey)
+  try {
+    const url = await state.media.getImageUrl(m.driveKey, m.path, { noSizeCap: trusted })
+    if (url) {
+      appendMediaElement(container, m, url)
+      return
+    }
+    if (trusted) return // getImageUrl returned null for reasons other than cap
+    const info = await state.media.getPeerEntryInfo(m.driveKey, m.path)
+    if (info && info.size > MAX_PEER_FILE_BYTES) {
+      const btn = document.createElement('button')
+      btn.className = 'large-media-badge'
+      btn.textContent = `📎 Large file (${formatFileSize(info.size)}) — click to load`
+      btn.addEventListener('click', async () => {
+        btn.disabled = true
+        btn.textContent = 'Loading…'
+        const forceUrl = await state.media.getImageUrl(m.driveKey, m.path, { noSizeCap: true })
+        if (forceUrl) {
+          btn.remove()
+          appendMediaElement(container, m, forceUrl)
+        } else {
+          btn.textContent = 'Failed to load'
+          btn.disabled = false
+        }
+      })
+      container.appendChild(btn)
+    }
+  } catch (err) {
+    console.error('Error loading media:', err)
+  }
+}
+
+function appendMediaElement(container, m, url) {
+  if (m.type === 'video' || m.mimeType?.startsWith('video/')) {
+    const video = document.createElement('video')
+    video.src = url
+    video.className = 'post-video'
+    video.controls = true
+    video.preload = 'metadata'
+    container.appendChild(video)
+  } else if (m.mimeType?.startsWith('image/')) {
+    const img = document.createElement('img')
+    img.src = url
+    img.className = 'post-image'
+    img.alt = 'attached image'
+    container.appendChild(img)
+  } else if (m.type === 'file') {
+    const fileDiv = document.createElement('div')
+    fileDiv.className = 'post-file'
+    fileDiv.innerHTML = `
+      <span class="file-icon">&#128206;</span>
+      <a href="${url}" download="${escapeHtml(m.filename || 'file')}" class="file-link">${escapeHtml(m.filename || 'Download file')}</a>
+      <span class="file-size">(${formatFileSize(m.size)})</span>
+    `
+    container.appendChild(fileDiv)
+  } else {
+    const img = document.createElement('img')
+    img.src = url
+    img.className = 'post-image'
+    img.alt = 'attached image'
+    container.appendChild(img)
+  }
+}
 
 // Callback for author clicks (set by app.js)
 let onAuthorClickCallback = null
@@ -1087,47 +1167,7 @@ export async function renderPosts(posts, refreshUI) {
 
     if (post && mediaList && mediaList.length > 0 && state.media) {
       for (const m of mediaList) {
-        try {
-          const url = await state.media.getImageUrl(m.driveKey, m.path)
-          if (url) {
-            // Check media type
-            if (m.type === 'video' || m.mimeType?.startsWith('video/')) {
-              // Video element
-              const video = document.createElement('video')
-              video.src = url
-              video.className = 'post-video'
-              video.controls = true
-              video.preload = 'metadata'
-              mediaContainer.appendChild(video)
-            } else if (m.mimeType?.startsWith('image/')) {
-              // Image (check mimeType first to handle images uploaded via file button)
-              const img = document.createElement('img')
-              img.src = url
-              img.className = 'post-image'
-              img.alt = 'attached image'
-              mediaContainer.appendChild(img)
-            } else if (m.type === 'file') {
-              // File download link (non-image files)
-              const fileDiv = document.createElement('div')
-              fileDiv.className = 'post-file'
-              fileDiv.innerHTML = `
-                <span class="file-icon">&#128206;</span>
-                <a href="${url}" download="${escapeHtml(m.filename || 'file')}" class="file-link">${escapeHtml(m.filename || 'Download file')}</a>
-                <span class="file-size">(${formatFileSize(m.size)})</span>
-              `
-              mediaContainer.appendChild(fileDiv)
-            } else {
-              // Default fallback - treat as image
-              const img = document.createElement('img')
-              img.src = url
-              img.className = 'post-image'
-              img.alt = 'attached image'
-              mediaContainer.appendChild(img)
-            }
-          }
-        } catch (err) {
-          console.error('Error loading media:', err)
-        }
+        await renderMediaInto(mediaContainer, post.pubkey, m)
       }
     }
   }
@@ -1143,43 +1183,7 @@ export async function renderPosts(posts, refreshUI) {
     if (reply && reply.media && reply.media.length > 0 && state.media) {
       for (const m of reply.media) {
         try {
-          const url = await state.media.getImageUrl(m.driveKey, m.path)
-          if (url) {
-            // Check media type
-            if (m.type === 'video' || m.mimeType?.startsWith('video/')) {
-              // Video element
-              const video = document.createElement('video')
-              video.src = url
-              video.className = 'reply-video'
-              video.controls = true
-              video.preload = 'metadata'
-              mediaContainer.appendChild(video)
-            } else if (m.mimeType?.startsWith('image/')) {
-              // Image (check mimeType first to handle images uploaded via file button)
-              const img = document.createElement('img')
-              img.src = url
-              img.className = 'reply-image'
-              img.alt = 'attached image'
-              mediaContainer.appendChild(img)
-            } else if (m.type === 'file') {
-              // File download link (non-image files)
-              const fileDiv = document.createElement('div')
-              fileDiv.className = 'reply-file'
-              fileDiv.innerHTML = `
-                <span class="file-icon">&#128206;</span>
-                <a href="${url}" download="${escapeHtml(m.filename || 'file')}" class="file-link">${escapeHtml(m.filename || 'Download file')}</a>
-                <span class="file-size">(${formatFileSize(m.size)})</span>
-              `
-              mediaContainer.appendChild(fileDiv)
-            } else {
-              // Default fallback - treat as image
-              const img = document.createElement('img')
-              img.src = url
-              img.className = 'reply-image'
-              img.alt = 'attached image'
-              mediaContainer.appendChild(img)
-            }
-          }
+          await renderMediaInto(mediaContainer, reply.pubkey, m)
         } catch (err) {
           console.error('Error loading reply media:', err)
         }
@@ -1429,47 +1433,7 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
     const post = timeline.find(p => (p.type === 'post' || p.type === 'reply') && p.pubkey === pubkey && p.timestamp === ts)
     if (post && post.media && post.media.length > 0 && state.media) {
       for (const m of post.media) {
-        try {
-          const url = await state.media.getImageUrl(m.driveKey, m.path)
-          if (url) {
-            // Check media type
-            if (m.type === 'video' || m.mimeType?.startsWith('video/')) {
-              // Video element
-              const video = document.createElement('video')
-              video.src = url
-              video.className = 'post-video'
-              video.controls = true
-              video.preload = 'metadata'
-              mediaContainer.appendChild(video)
-            } else if (m.mimeType?.startsWith('image/')) {
-              // Image (check mimeType first to handle images uploaded via file button)
-              const img = document.createElement('img')
-              img.src = url
-              img.className = 'post-image'
-              img.alt = 'attached image'
-              mediaContainer.appendChild(img)
-            } else if (m.type === 'file') {
-              // File download link (non-image files)
-              const fileDiv = document.createElement('div')
-              fileDiv.className = 'post-file'
-              fileDiv.innerHTML = `
-                <span class="file-icon">&#128206;</span>
-                <a href="${url}" download="${escapeHtml(m.filename || 'file')}" class="file-link">${escapeHtml(m.filename || 'Download file')}</a>
-                <span class="file-size">(${formatFileSize(m.size)})</span>
-              `
-              mediaContainer.appendChild(fileDiv)
-            } else {
-              // Default fallback - treat as image
-              const img = document.createElement('img')
-              img.src = url
-              img.className = 'post-image'
-              img.alt = 'attached image'
-              mediaContainer.appendChild(img)
-            }
-          }
-        } catch (err) {
-          console.error('Error loading media:', err)
-        }
+        await renderMediaInto(mediaContainer, post.pubkey, m)
       }
     }
   }

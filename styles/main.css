@@ -6454,6 +6454,29 @@ body.duplicate-instance-active .paywall-unlock-btn {
   color: #e6edf3;
 }
 
+/* "Large file — click to load" badge for oversize FoF media */
+.large-media-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin-top: 8px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #e6edf3;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.large-media-badge:hover:not(:disabled) {
+  border-color: #ff6600;
+}
+.large-media-badge:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* Public hyper-site section in profile settings */
 .profile-public-site-section {
   margin-top: 20px;
