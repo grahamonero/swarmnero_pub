@@ -60,10 +60,38 @@ export async function renderStorage() {
 
   renderSummary(summary, onDisk)
   renderSettings(summary)
+  renderLastPrune(sm.lastPruneResult)
   renderFollowsList(summary)
   renderClearAll(summary)
 
   wireHandlers()
+}
+
+function formatRelative(ts) {
+  if (!ts) return ''
+  const ms = Date.now() - ts
+  if (ms < 60_000) return 'just now'
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`
+  if (ms < 86_400_000) return `${Math.round(ms / 3_600_000)}h ago`
+  return `${Math.round(ms / 86_400_000)}d ago`
+}
+
+function renderLastPrune(result) {
+  const el = document.getElementById('storagePruneStatus')
+  if (!el) return
+  if (!result) {
+    el.innerHTML = ''
+    return
+  }
+  if (result.skipped) {
+    el.innerHTML = `<span class="hint">Last auto-prune: skipped (${escapeHtml(result.reason || 'n/a')}) · ${formatRelative(result.ranAt)}</span>`
+    return
+  }
+  const freed = Math.max(0, result.startBytes - result.endBytes)
+  const warn = result.stillOverCap
+    ? ' <span class="storage-warning-inline">still over cap — reduce keep-per-follow or raise cap</span>'
+    : ''
+  el.innerHTML = `<span class="hint">Last prune: freed ${formatBytes(freed)} across ${result.followsTouched} follow(s), ${result.blocksCleared} block(s) · ${formatRelative(result.ranAt)}</span>${warn}`
 }
 
 function renderSummary(summary, onDisk) {
@@ -132,7 +160,11 @@ function renderSettings(summary) {
             <span>${summary.autoPrune ? 'On' : 'Off'}</span>
           </label>
         </div>
-        <span class="hint">(Phase 2 — config saved now, eviction runs later.)</span>
+        <span class="hint">Runs 10s after startup and every 30 min when over cap.</span>
+      </div>
+      <div class="setting-row">
+        <button id="storageRunPruneBtn" class="btn-small btn-primary">Run prune now</button>
+        <div id="storagePruneStatus" class="storage-prune-status"></div>
       </div>
     </div>
   `
@@ -193,6 +225,7 @@ function wireHandlers() {
   const keepSel = document.getElementById('storageKeepSelect')
   const autoPrune = document.getElementById('storageAutoPrune')
   const clearAll = document.getElementById('storageClearAllBtn')
+  const runPrune = document.getElementById('storageRunPruneBtn')
   const sm = state.storageManager
 
   if (capSel) {
@@ -235,6 +268,23 @@ function wireHandlers() {
       }
     })
   })
+
+  if (runPrune) {
+    runPrune.addEventListener('click', async () => {
+      runPrune.disabled = true
+      runPrune.textContent = 'Pruning…'
+      try {
+        await sm.runPrune()
+      } catch (err) {
+        console.warn('[Storage] runPrune failed:', err.message)
+        alert('Prune failed: ' + err.message)
+      } finally {
+        runPrune.disabled = false
+        runPrune.textContent = 'Run prune now'
+        renderStorage()
+      }
+    })
+  }
 
   if (clearAll) {
     clearAll.addEventListener('click', async () => {

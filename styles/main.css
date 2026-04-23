@@ -6662,6 +6662,8 @@ body.duplicate-instance-active .paywall-unlock-btn {
 .storage-legend.idx::before { color: #7e57c2; }
 .storage-legend.other::before { color: #607d8b; }
 .storage-warning { margin-top: 0.5rem; color: #ff9800; font-size: 0.85rem; }
+.storage-warning-inline { color: #ff9800; font-size: 0.85rem; margin-left: 0.5rem; }
+.storage-prune-status { flex-basis: 100%; margin-top: 0.25rem; }
 
 .storage-follows-list { display: flex; flex-direction: column; gap: 0.5rem; }
 .storage-follow-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 0.75rem; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; }

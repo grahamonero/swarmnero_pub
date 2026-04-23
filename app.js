@@ -58,6 +58,46 @@ export function schedulePublicSiteRebuild() {
   }, 2000)
 }
 
+// Storage auto-prune scheduling — kick once ~10s after startup so the cache is warm,
+// then every 30 minutes. The 30-min cadence is cheap because maybeRunPrune() returns
+// early when under 0.9 × cap; only over-cap situations do real work.
+const STORAGE_PRUNE_INITIAL_DELAY_MS = 10_000
+const STORAGE_PRUNE_INTERVAL_MS = 30 * 60 * 1000
+let _storagePruneInitialTimer = null
+let _storagePruneInterval = null
+
+function runStoragePruneSafely() {
+  const sm = state.storageManager
+  if (!sm) return
+  sm.maybeRunPrune()
+    .then(res => {
+      if (!res?.skipped) {
+        console.log(`[App] Auto-prune freed ${(res.startBytes - res.endBytes) / 1e6 | 0}MB across ${res.followsTouched} follow(s)`)
+      }
+    })
+    .catch(err => console.warn('[App] Auto-prune error:', err.message))
+}
+
+export function startStoragePruneTimer() {
+  stopStoragePruneTimer()
+  _storagePruneInitialTimer = setTimeout(() => {
+    _storagePruneInitialTimer = null
+    runStoragePruneSafely()
+  }, STORAGE_PRUNE_INITIAL_DELAY_MS)
+  _storagePruneInterval = setInterval(runStoragePruneSafely, STORAGE_PRUNE_INTERVAL_MS)
+}
+
+export function stopStoragePruneTimer() {
+  if (_storagePruneInitialTimer) {
+    clearTimeout(_storagePruneInitialTimer)
+    _storagePruneInitialTimer = null
+  }
+  if (_storagePruneInterval) {
+    clearInterval(_storagePruneInterval)
+    _storagePruneInterval = null
+  }
+}
+
 // Official Swarmnero account - new users auto-follow this account
 const OFFICIAL_SWARM_ID = '9aa8bf64357d4db09ea62aa6ddd771affc161d43624e3d162e1d115af5503e74'
 // Previous official Swarmnero account (rotated 2026-04-20). Existing users
@@ -1228,6 +1268,7 @@ async function continueInit(accountManager) {
   const storageManager = new StorageManager({ feed, dataDir: DATA_DIR, tagIndex, fofCache, state })
   storageManager.loadConfig()
   state.storageManager = storageManager
+  startStoragePruneTimer()
   console.log('StorageManager initialized')
 
   // Initialize TipBatcher for delayed tip broadcasts (privacy)
@@ -1455,6 +1496,7 @@ async function continueInit(accountManager) {
     state.replyNotify = null
     state.tipBatcher = null
     state.storageManager = null
+    stopStoragePruneTimer()
     state.identity = null
     state.myProfile = null
     state.peerProfiles = {}
@@ -1552,6 +1594,7 @@ async function continueInit(accountManager) {
     state.replyNotify = null
     state.tipBatcher = null
     state.storageManager = null
+    stopStoragePruneTimer()
 
     // Brief delay to allow file locks to release
     await new Promise(resolve => setTimeout(resolve, 500))
@@ -1658,6 +1701,7 @@ async function continueInit(accountManager) {
     })
     newStorageManager.loadConfig()
     state.storageManager = newStorageManager
+    startStoragePruneTimer()
 
     // Update unread badge
     await updateUnreadBadge()
