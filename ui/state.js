@@ -44,6 +44,9 @@ export const state = {
   // Supporter Manager
   supporterManager: null,   // SupporterManager instance
 
+  // Storage Manager (local disk usage + prune)
+  storageManager: null,
+
   // Sync Client
   syncClient: null,         // SyncClient instance for feed backup
 
@@ -246,7 +249,11 @@ export const dom = {
 
   // Settings
   settingsSection: null,
-  settingsContent: null
+  settingsContent: null,
+
+  // Storage
+  storageSection: null,
+  storageContent: null
 }
 
 /**
@@ -423,6 +430,10 @@ export function initDom() {
   // Settings
   dom.settingsSection = document.getElementById('settings-section')
   dom.settingsContent = document.getElementById('settingsContent')
+
+  // Storage
+  dom.storageSection = document.getElementById('storage-section')
+  dom.storageContent = document.getElementById('storageContent')
 }
 
 /**

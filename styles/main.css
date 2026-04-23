@@ -6642,3 +6642,33 @@ body.duplicate-instance-active .paywall-unlock-btn {
 .my-reply-card .my-reply-context .post-author:hover {
   text-decoration: underline;
 }
+
+/* Storage panel */
+.storage-container { padding: 1rem; }
+.storage-container h3 { margin-bottom: 1rem; }
+.storage-section { margin-bottom: 1.5rem; padding: 1rem; background: #161b22; border-radius: 8px; }
+.storage-section h4 { margin-bottom: 0.75rem; border-bottom: 1px solid #30363d; padding-bottom: 0.5rem; }
+
+.storage-summary { margin-bottom: 1.5rem; padding: 1rem; background: #161b22; border-radius: 8px; border: 1px solid #30363d; }
+.storage-usage-line { font-size: 1.1rem; margin-bottom: 0.5rem; }
+.storage-usage-line strong { color: #e6edf3; }
+.storage-bar { width: 100%; height: 10px; background: #0d1117; border-radius: 5px; overflow: hidden; border: 1px solid #30363d; margin-bottom: 0.5rem; }
+.storage-bar-fill { height: 100%; background: linear-gradient(90deg, #4caf50, #ff9800); transition: width 0.3s ease; }
+.storage-bar-over .storage-bar-fill { background: #d32f2f; }
+.storage-legend-row { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.8rem; color: #8b949e; }
+.storage-legend::before { content: '■'; margin-right: 0.25rem; }
+.storage-legend.feeds::before { color: #4caf50; }
+.storage-legend.media::before { color: #ff9800; }
+.storage-legend.idx::before { color: #7e57c2; }
+.storage-legend.other::before { color: #607d8b; }
+.storage-warning { margin-top: 0.5rem; color: #ff9800; font-size: 0.85rem; }
+
+.storage-follows-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.storage-follow-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 0.75rem; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; }
+.storage-follow-info { min-width: 0; flex: 1; }
+.storage-follow-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.storage-follow-meta { font-size: 0.8rem; margin-top: 0.15rem; }
+.storage-clear-btn { flex-shrink: 0; }
+
+.toggle { display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+.toggle input[type="checkbox"] { width: 18px; height: 18px; }

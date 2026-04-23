@@ -1581,7 +1581,7 @@ export async function showProfileInCenter(profileData) {
   const wasHidden = dom.postsEl.classList.contains('hidden')
 
   // Hide any section that's covering the center column
-  document.querySelectorAll('#discovery-section, #search-section, #trending-section, #settings-section, #messages-section').forEach(el => {
+  document.querySelectorAll('#discovery-section, #search-section, #trending-section, #settings-section, #storage-section, #messages-section').forEach(el => {
     if (el && !el.classList.contains('hidden')) {
       el.classList.add('hidden')
       el.dataset.hiddenByProfile = 'true'

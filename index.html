@@ -51,7 +51,7 @@
     <header>
       <div class="logo">
         <img src="./logo.png" alt="Swarmnero" class="logo-img">
-        <span class="version" id="versionBadge">v0.8.40</span>
+        <span class="version" id="versionBadge">v0.8.41</span>
       </div>
       <div class="user-info">
         <span id="headerSyncStatus" class="header-sync-status hidden" title="Feed backup status"></span>
@@ -85,6 +85,7 @@
           <button class="nav-btn nav-btn-compact" data-view="trending"><span class="nav-icon">📈</span> Trending</button>
           <div class="nav-divider"></div>
           <button class="nav-btn nav-btn-compact nav-btn-secondary" data-view="settings"><span class="nav-icon">⚙</span> Settings</button>
+          <button class="nav-btn nav-btn-compact nav-btn-secondary" data-view="storage"><span class="nav-icon">💾</span> Storage</button>
           <button class="nav-btn nav-btn-compact nav-btn-secondary" data-view="accounts"><span class="nav-icon">🔄</span> Accounts</button>
           <button id="logoutBtn" class="nav-btn nav-btn-compact nav-btn-logout"><span class="nav-icon">🚪</span> Logout</button>
         </nav>
@@ -223,6 +224,14 @@
             <h2>Settings</h2>
           </div>
           <div id="settingsContent"></div>
+        </section>
+
+        <section id="storage-section" class="content-section hidden">
+          <div class="section-header">
+            <button class="back-to-feed-btn" id="storageBackBtn">&larr; Back to Feed</button>
+            <h2>Storage</h2>
+          </div>
+          <div id="storageContent"></div>
         </section>
       </main>
 

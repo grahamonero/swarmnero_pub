@@ -516,6 +516,7 @@ function hideAllPanelSections() {
   dom.searchSection?.classList.add('hidden')
   dom.trendingSection?.classList.add('hidden')
   dom.settingsSection?.classList.add('hidden')
+  dom.storageSection?.classList.add('hidden')
 }
 
 /**
@@ -662,6 +663,13 @@ export async function showPanelView(type, data = {}) {
       import('./settings.js').then(m => m.renderSettings())
       break
 
+    case 'storage':
+      dom.postsEl?.classList.add('hidden')
+      dom.storageSection?.classList.remove('hidden')
+      document.querySelector('.nav-btn[data-view="storage"]')?.classList.add('active')
+      import('./storage.js').then(m => m.renderStorage())
+      break
+
     default:
       // Default to Swarm ID - restore posts view
       dom.postsEl?.classList.remove('hidden')
@@ -739,6 +747,7 @@ export function showSection(sectionName) {
     'search': 'search',
     'trending': 'trending',
     'settings': 'settings',
+    'storage': 'storage',
     'user-profile': null, // This is handled by showProfile/showThread directly
     'thread': null        // This is handled by showThread directly
   }

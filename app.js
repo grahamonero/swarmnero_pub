@@ -22,6 +22,7 @@ import { FoF } from './lib/fof.js'
 import { ReplyNotify } from './lib/reply-notify.js'
 import { TipBatcher } from './lib/tip-batcher.js'
 import { getTagIndex } from './lib/tag-index.js'
+import { StorageManager } from './lib/storage-manager.js'
 import { renderSearch, setupSearchHandlers, initSearch } from './ui/components/search.js'
 import { renderTrending, setupTrendingHandlers } from './ui/components/trending.js'
 import { renderSettings, setupSettingsHandlers, initSettings } from './ui/components/settings.js'
@@ -1223,6 +1224,12 @@ async function continueInit(accountManager) {
   feed.setFoF(fof)
   console.log('FoF initialized')
 
+  // Storage manager (tracks disk usage + exposes prune ops)
+  const storageManager = new StorageManager({ feed, dataDir: DATA_DIR, tagIndex, fofCache, state })
+  storageManager.loadConfig()
+  state.storageManager = storageManager
+  console.log('StorageManager initialized')
+
   // Initialize TipBatcher for delayed tip broadcasts (privacy)
   const tipBatcher = new TipBatcher(feed, DATA_DIR)
   tipBatcher.init()
@@ -1366,7 +1373,7 @@ async function continueInit(accountManager) {
     }
 
     // Back to Feed buttons in center column sections
-    const backBtns = ['searchBackBtn', 'trendingBackBtn', 'settingsBackBtn']
+    const backBtns = ['searchBackBtn', 'trendingBackBtn', 'settingsBackBtn', 'storageBackBtn']
     backBtns.forEach(btnId => {
       const btn = document.getElementById(btnId)
       if (btn) {
@@ -1447,6 +1454,7 @@ async function continueInit(accountManager) {
     state.tagIndex = null
     state.replyNotify = null
     state.tipBatcher = null
+    state.storageManager = null
     state.identity = null
     state.myProfile = null
     state.peerProfiles = {}
@@ -1543,6 +1551,7 @@ async function continueInit(accountManager) {
     state.tagIndex = null
     state.replyNotify = null
     state.tipBatcher = null
+    state.storageManager = null
 
     // Brief delay to allow file locks to release
     await new Promise(resolve => setTimeout(resolve, 500))
@@ -1638,6 +1647,17 @@ async function continueInit(accountManager) {
     await newFoF.init()
     state.fof = newFoF
     newFeed.setFoF(newFoF)
+
+    // Rebind StorageManager to the new account's feed + caches
+    const newStorageManager = new StorageManager({
+      feed: newFeed,
+      dataDir: DATA_DIR,
+      tagIndex: newTagIndex,
+      fofCache: newFoFCache,
+      state
+    })
+    newStorageManager.loadConfig()
+    state.storageManager = newStorageManager
 
     // Update unread badge
     await updateUnreadBadge()
