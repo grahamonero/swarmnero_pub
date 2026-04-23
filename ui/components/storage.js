@@ -76,6 +76,12 @@ function formatRelative(ts) {
   return `${Math.round(ms / 86_400_000)}d ago`
 }
 
+function mediaSummaryLine(media) {
+  if (!media || media.skipped) return ''
+  if (!media.driveKeysScanned) return ''
+  return ` + ${formatBytes(media.bytesCleared)} media across ${media.driveKeysScanned} drive(s)`
+}
+
 function renderLastPrune(result) {
   const el = document.getElementById('storagePruneStatus')
   if (!el) return
@@ -84,14 +90,16 @@ function renderLastPrune(result) {
     return
   }
   if (result.skipped) {
-    el.innerHTML = `<span class="hint">Last auto-prune: skipped (${escapeHtml(result.reason || 'n/a')}) · ${formatRelative(result.ranAt)}</span>`
+    const mediaNote = mediaSummaryLine(result.media)
+    el.innerHTML = `<span class="hint">Last auto-prune: skipped (${escapeHtml(result.reason || 'n/a')})${mediaNote} · ${formatRelative(result.ranAt)}</span>`
     return
   }
   const freed = Math.max(0, result.startBytes - result.endBytes)
+  const mediaNote = mediaSummaryLine(result.media)
   const warn = result.stillOverCap
     ? ' <span class="storage-warning-inline">still over cap — reduce keep-per-follow or raise cap</span>'
     : ''
-  el.innerHTML = `<span class="hint">Last prune: freed ${formatBytes(freed)} across ${result.followsTouched} follow(s), ${result.blocksCleared} block(s) · ${formatRelative(result.ranAt)}</span>${warn}`
+  el.innerHTML = `<span class="hint">Last prune: freed ${formatBytes(freed)} across ${result.followsTouched} follow(s), ${result.blocksCleared} block(s)${mediaNote} · ${formatRelative(result.ranAt)}</span>${warn}`
 }
 
 function renderSummary(summary, onDisk) {
