@@ -55,9 +55,6 @@ export function renderAccountDropdown() {
         </div>
       `}).join('')}
       <div class="account-divider"></div>
-      <div class="account-nav-item" data-view-route="profile">
-        <span class="nav-icon">👤</span>Profile
-      </div>
       <div class="account-nav-item" data-view-route="search">
         <span class="nav-icon">🔎</span>Search
       </div>
