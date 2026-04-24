@@ -48,48 +48,39 @@
   </div>
 
   <div class="container">
-    <header>
-      <div class="logo">
+    <header class="topnav">
+      <div class="topnav-brand">
         <img src="./logo.png" alt="Swarmnero" class="logo-img">
-        <span class="version" id="versionBadge">v0.8.43</span>
+        <span class="topnav-wordmark">Swarmnero</span>
+        <span class="version" id="versionBadge">v0.8.44</span>
       </div>
-      <div class="user-info">
+      <nav class="topnav-tabs">
+        <button id="feedNavBtn" class="nav-btn topnav-tab"><span class="nav-icon">🏠</span><span class="topnav-tab-label">Home</span></button>
+        <button id="notificationsNavBtn" class="nav-btn topnav-tab" data-view="notifications">
+          <span class="nav-icon">🔔</span><span class="topnav-tab-label">Notifications</span>
+          <span id="notificationsBadge" class="badge hidden">0</span>
+        </button>
+        <button id="messagesNavBtn" class="nav-btn topnav-tab" data-view="messages">
+          <span class="nav-icon">💬</span><span class="topnav-tab-label">Messages</span>
+          <span id="messagesBadge" class="badge hidden">0</span>
+        </button>
+        <button class="nav-btn topnav-tab" data-view="discovery"><span class="nav-icon">🔍</span><span class="topnav-tab-label">Discover</span></button>
+        <button id="walletNavBtn" class="nav-btn topnav-tab"><span class="nav-icon">💰</span><span class="topnav-tab-label">Wallet</span></button>
+      </nav>
+      <div class="topnav-spacer"></div>
+      <div class="topnav-actions">
+        <button id="createPostBtn" class="nav-btn nav-btn-primary topnav-post"><span class="nav-icon">✏</span><span class="topnav-post-label">Post</span></button>
         <span id="headerSyncStatus" class="header-sync-status hidden" title="Feed backup status"></span>
         <span class="status connecting" id="status"></span>
         <span class="header-peer-count" id="headerPeerCount">0</span>
         <div class="account-dropdown" id="accountDropdown">
-          <!-- Rendered by JS -->
+          <!-- Rendered by JS (expanded to include secondary nav items) -->
         </div>
+        <button id="logoutBtn" class="nav-btn nav-btn-logout hidden" aria-hidden="true"><span class="nav-icon">🚪</span>Logout</button>
       </div>
     </header>
 
     <div class="app-layout" id="appLayout">
-      <!-- Left Column -->
-      <aside class="left-column">
-        <nav class="nav-buttons main-nav">
-          <button id="createPostBtn" class="nav-btn nav-btn-primary"><span class="nav-icon">✏</span> Create Post</button>
-          <button id="notificationsNavBtn" class="nav-btn nav-btn-compact nav-btn-priority" data-view="notifications">
-            <span class="nav-icon">🔔</span> Notifications
-            <span id="notificationsBadge" class="badge hidden">0</span>
-          </button>
-          <button id="messagesNavBtn" class="nav-btn nav-btn-compact nav-btn-priority" data-view="messages">
-            <span class="nav-icon">💬</span> Messages
-            <span id="messagesBadge" class="badge hidden">0</span>
-          </button>
-          <div class="nav-divider"></div>
-          <button id="feedNavBtn" class="nav-btn nav-btn-compact"><span class="nav-icon">🏠</span> Feed</button>
-          <button id="walletNavBtn" class="nav-btn nav-btn-compact"><span class="nav-icon">💰</span> Wallet</button>
-          <button class="nav-btn nav-btn-compact" data-view="profile"><span class="nav-icon">👤</span> Profile</button>
-          <button class="nav-btn nav-btn-compact" data-view="discovery"><span class="nav-icon">🔍</span> Discover</button>
-          <button class="nav-btn nav-btn-compact" data-view="search"><span class="nav-icon">🔎</span> Search</button>
-          <button class="nav-btn nav-btn-compact" data-view="trending"><span class="nav-icon">📈</span> Trending</button>
-          <div class="nav-divider"></div>
-          <button class="nav-btn nav-btn-compact nav-btn-secondary" data-view="settings"><span class="nav-icon">⚙</span> Settings</button>
-          <button class="nav-btn nav-btn-compact nav-btn-secondary" data-view="storage"><span class="nav-icon">💾</span> Storage</button>
-          <button class="nav-btn nav-btn-compact nav-btn-secondary" data-view="accounts"><span class="nav-icon">🔄</span> Accounts</button>
-          <button id="logoutBtn" class="nav-btn nav-btn-compact nav-btn-logout"><span class="nav-icon">🚪</span> Logout</button>
-        </nav>
-      </aside>
 
       <!-- Center Column -->
       <main class="center-column">
@@ -244,10 +235,11 @@
           </div>
           <div class="panel-content">
             <p class="swarm-id-hint">Share this so others can follow or message you:</p>
-            <div class="swarm-id-display">
-              <code class="swarm-id-value" id="swarmId">-</code>
+            <div class="swarm-id-row">
+              <code class="swarm-id-value swarm-id-truncated" id="swarmId">-</code>
+              <button class="btn-small swarm-id-btn" id="copySwarmId" title="Copy to clipboard">Copy</button>
+              <button class="btn-small swarm-id-btn swarm-id-show-btn" id="showSwarmIdBtn" title="Show full Swarm ID">Show</button>
             </div>
-            <button class="copy-btn full-width" id="copySwarmId">Copy My ID</button>
             <div class="stats-row">
               <div class="stat">
                 <span class="stat-value" id="feedLength">0</span>
@@ -286,8 +278,11 @@
           </div>
           <div class="my-swarm-id-section" id="mySwarmIdSection">
             <span class="swarm-id-label">Your Swarm ID</span>
-            <code class="swarm-id-value" id="mySwarmIdValue"></code>
-            <button class="btn-small" id="mySwarmIdCopy">Copy</button>
+            <div class="swarm-id-row">
+              <code class="swarm-id-value swarm-id-truncated" id="mySwarmIdValue">-</code>
+              <button class="btn-small swarm-id-btn" id="mySwarmIdCopy" title="Copy to clipboard">Copy</button>
+              <button class="btn-small swarm-id-btn swarm-id-show-btn" id="mySwarmIdShow" title="Show full Swarm ID">Show</button>
+            </div>
           </div>
           <div class="panel-content">
             <div class="form-group avatar-upload-group">
@@ -858,6 +853,21 @@
       <div class="modal-actions">
         <button id="loginWalletSkip" class="secondary-btn">Skip</button>
         <button id="loginWalletUnlock">Unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Swarm ID modal (shown via Show button) -->
+  <div class="modal hidden" id="swarmIdModal">
+    <div class="modal-content swarm-id-modal-content">
+      <h3>Your Swarm ID</h3>
+      <p class="swarm-id-modal-hint">Share this 64-character ID so others can follow you. It is safe to share publicly — it's a read-only identifier, not your secret key.</p>
+      <div class="swarm-id-modal-value-wrapper">
+        <code class="swarm-id-modal-value" id="swarmIdModalValue"></code>
+      </div>
+      <div class="modal-actions">
+        <button id="swarmIdModalClose" class="secondary-btn">Close</button>
+        <button id="swarmIdModalCopy">Copy</button>
       </div>
     </div>
   </div>

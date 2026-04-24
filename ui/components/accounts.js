@@ -55,8 +55,27 @@ export function renderAccountDropdown() {
         </div>
       `}).join('')}
       <div class="account-divider"></div>
+      <div class="account-nav-item" data-view-route="profile">
+        <span class="nav-icon">👤</span>Profile
+      </div>
+      <div class="account-nav-item" data-view-route="search">
+        <span class="nav-icon">🔎</span>Search
+      </div>
+      <div class="account-nav-item" data-view-route="trending">
+        <span class="nav-icon">📈</span>Trending
+      </div>
+      <div class="account-nav-item" data-view-route="storage">
+        <span class="nav-icon">💾</span>Storage
+      </div>
+      <div class="account-nav-item" data-view-route="settings">
+        <span class="nav-icon">⚙</span>Settings
+      </div>
+      <div class="account-divider"></div>
       <div class="account-action" id="manageAccountsBtn">
         Manage Accounts
+      </div>
+      <div class="account-nav-item logout" id="accountMenuLogout">
+        <span class="nav-icon">🚪</span>Logout
       </div>
     </div>
   `
@@ -115,6 +134,27 @@ export function renderAccountDropdown() {
       e.stopPropagation()
       menu.classList.add('hidden')
       showSection('accounts')
+    })
+  }
+
+  // Secondary nav items (Profile, Search, Trending, Storage, Settings)
+  dom.accountDropdown.querySelectorAll('.account-nav-item[data-view-route]').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation()
+      menu.classList.add('hidden')
+      // Clear active state from primary topnav tabs, then show the section.
+      document.querySelectorAll('.nav-btn.active').forEach(b => b.classList.remove('active'))
+      showSection(item.dataset.viewRoute)
+    })
+  })
+
+  // Logout routed through existing logout button handler
+  const logoutItem = document.getElementById('accountMenuLogout')
+  if (logoutItem) {
+    logoutItem.addEventListener('click', (e) => {
+      e.stopPropagation()
+      menu.classList.add('hidden')
+      document.getElementById('logoutBtn')?.click()
     })
   }
 }

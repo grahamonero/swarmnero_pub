@@ -172,10 +172,12 @@ export async function updateProfileForm() {
   // Update Following/Followers stats
   updateMyProfileStats()
 
-  // Update Swarm ID display
+  // Update Swarm ID display — truncated (full ID is shown via Show button → modal)
   const swarmIdEl = document.getElementById('mySwarmIdValue')
   if (swarmIdEl && state.feed?.swarmId) {
-    swarmIdEl.textContent = state.feed.swarmId
+    const id = state.feed.swarmId
+    swarmIdEl.textContent = `${id.slice(0, 8)}…${id.slice(-8)}`
+    swarmIdEl.title = id
   }
 
   // Always set form values from state.myProfile

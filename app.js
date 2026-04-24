@@ -159,7 +159,7 @@ function initNavButtons() {
   })
 }
 
-// Copy Swarm ID handler
+// Copy Swarm ID handler (My ID panel)
 function initCopySwarmId() {
   dom.copySwarmIdBtn.addEventListener('click', async () => {
     if (!state.feed?.swarmId) return
@@ -168,8 +168,57 @@ function initCopySwarmId() {
       dom.copySwarmIdBtn.textContent = 'Copied!'
       dom.copySwarmIdBtn.classList.add('copied')
       setTimeout(() => {
-        dom.copySwarmIdBtn.textContent = 'Copy My ID'
+        dom.copySwarmIdBtn.textContent = 'Copy'
         dom.copySwarmIdBtn.classList.remove('copied')
+      }, 2000)
+    } catch (err) {
+      console.error('Copy failed:', err)
+    }
+  })
+}
+
+// Show/Copy Swarm ID modal — triggered from either My ID panel or profile panel
+function initShowSwarmIdModal() {
+  const modal = document.getElementById('swarmIdModal')
+  const modalValue = document.getElementById('swarmIdModalValue')
+  const modalClose = document.getElementById('swarmIdModalClose')
+  const modalCopy = document.getElementById('swarmIdModalCopy')
+  const showBtn1 = document.getElementById('showSwarmIdBtn')   // My ID panel
+  const showBtn2 = document.getElementById('mySwarmIdShow')    // Profile panel
+
+  if (!modal || !modalValue) return
+
+  const open = () => {
+    const swarmId = state.feed?.swarmId || ''
+    modalValue.textContent = swarmId || '(not available)'
+    modal.classList.remove('hidden')
+  }
+  const close = () => modal.classList.add('hidden')
+
+  showBtn1?.addEventListener('click', open)
+  showBtn2?.addEventListener('click', open)
+  modalClose?.addEventListener('click', close)
+
+  // Click outside modal-content to close
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) close()
+  })
+
+  // Escape to close
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) close()
+  })
+
+  modalCopy?.addEventListener('click', async () => {
+    const swarmId = state.feed?.swarmId
+    if (!swarmId) return
+    try {
+      await navigator.clipboard.writeText(swarmId)
+      modalCopy.textContent = 'Copied!'
+      modalCopy.classList.add('copied')
+      setTimeout(() => {
+        modalCopy.textContent = 'Copy'
+        modalCopy.classList.remove('copied')
       }, 2000)
     } catch (err) {
       console.error('Copy failed:', err)
@@ -588,11 +637,16 @@ async function appendReleaseLengthToVersion() {
     const v = await Pear.versions()
     const length = v?.app?.length
     const el = document.getElementById('versionBadge')
-    if (!el || !length) return
-    // Idempotent — strip any previously-appended `(nnnn)` before re-appending,
-    // so multiple invocations can't accumulate duplicate release tags.
-    const base = el.textContent.replace(/\s*\(\d+\)\s*$/, '')
-    el.textContent = `${base} (${length})`
+    if (!el) return
+    // Idempotent — strip any previously-appended `(nnnn)` or `(dev)` before re-appending.
+    const base = el.textContent.replace(/\s*\((?:\d+|dev)\)\s*$/, '')
+    if (length) {
+      el.textContent = `${base} (${length})`
+    } else if (Pear?.config?.dev) {
+      // Dev runs have no release length — surface the mode instead so the
+      // badge layout stays consistent with staged/released builds.
+      el.textContent = `${base} (dev)`
+    }
   } catch (err) {
     console.warn('[App] appendReleaseLengthToVersion:', err)
   }
@@ -1340,6 +1394,7 @@ async function continueInit(accountManager) {
   initProfile(refreshUI)
   initFollow(refreshUI)
   initCopySwarmId()
+  initShowSwarmIdModal()
   initQuickFollow()
   initTimelineToggle(refreshUI)
   initPanel()
