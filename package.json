@@ -1,6 +1,6 @@
 {
   "name": "swarmnero",
-  "version": "0.8.45",
+  "version": "0.8.46",
   "description": "P2P Social Network with Monero",
   "type": "module",
   "pear": {

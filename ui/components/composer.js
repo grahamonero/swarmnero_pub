@@ -76,6 +76,9 @@ function clearExpandedComposer() {
   if (fields) fields.classList.add('hidden')
   if (priceInput) priceInput.value = ''
   if (previewInput) previewInput.value = ''
+
+  // Hide metadata warning (shown only when video/file is pending)
+  document.getElementById('metadataWarningHint')?.classList.add('hidden')
 }
 
 /**
@@ -109,6 +112,34 @@ function updateExpCharCount() {
   dom.expPostBtn.disabled = dom.expPostContent.value.trim().length === 0 &&
     expPendingMedia.length === 0 && expPendingFiles.length === 0
   updateTagHint()
+  updateMetadataWarning()
+}
+
+/**
+ * Show a warning when a video or generic file is attached — Swarmnero does
+ * not strip metadata from those (only JPEG/PNG/WEBP images are re-encoded
+ * through a canvas to drop EXIF). Hidden when only images are queued.
+ */
+function updateMetadataWarning() {
+  const hint = document.getElementById('metadataWarningHint')
+  if (!hint) return
+  const hasVideo = expPendingMedia.some(f => f.type?.startsWith('video/'))
+  const hasFile = expPendingFiles.length > 0
+  const hintText = hint.querySelector('.hint-text')
+  if (!hintText) return
+
+  if (hasVideo && hasFile) {
+    hintText.innerHTML = '<strong>Heads up:</strong> video and file metadata / filenames are <strong>not</strong> removed. Consider stripping GPS, timestamps, and identifying filenames before attaching.'
+    hint.classList.remove('hidden')
+  } else if (hasVideo) {
+    hintText.innerHTML = '<strong>Heads up:</strong> video metadata is <strong>not</strong> removed. Consider stripping GPS and timestamps before attaching.'
+    hint.classList.remove('hidden')
+  } else if (hasFile) {
+    hintText.innerHTML = '<strong>Heads up:</strong> the filename and document metadata are <strong>not</strong> removed. Rename or clean the file before attaching if it could contain identifying info.'
+    hint.classList.remove('hidden')
+  } else {
+    hint.classList.add('hidden')
+  }
 }
 
 /**

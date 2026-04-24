@@ -6700,6 +6700,24 @@ body.duplicate-instance-active .paywall-unlock-btn {
 .toggle { display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer; }
 .toggle input[type="checkbox"] { width: 18px; height: 18px; }
 
+/* ==================== METADATA WARNING (composer) ==================== */
+.metadata-warning-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 8px 0 12px;
+  background: rgba(210, 153, 34, 0.08);
+  border: 1px solid rgba(210, 153, 34, 0.35);
+  border-radius: 8px;
+  color: #d29922;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.metadata-warning-hint .hint-icon { flex-shrink: 0; font-size: 13px; line-height: 1.5; }
+.metadata-warning-hint .hint-text { color: #d29922; }
+.metadata-warning-hint strong { color: #e6edf3; font-weight: 600; }
+
 /* ==================== TOPNAV (v0.8.44 — two-column layout) ==================== */
 
 .topnav {
