@@ -479,12 +479,19 @@ export function initComposer(refreshUI) {
     dom.expFileInput.click()
   })
 
-  // Handle file selection
+  // Handle file selection. Images/videos attached through the generic file
+  // button are routed to the media pipeline so EXIF stripping (images) still
+  // runs — otherwise they'd hit storeFile which keeps raw bytes + filename.
   dom.expFileInput.addEventListener('change', (e) => {
     const files = Array.from(e.target.files)
     for (const file of files) {
-      expPendingFiles.push(file)
-      addExpFilePreview(file)
+      if (file.type?.startsWith('image/') || file.type?.startsWith('video/')) {
+        expPendingMedia.push(file)
+        addExpMediaPreview(file)
+      } else {
+        expPendingFiles.push(file)
+        addExpFilePreview(file)
+      }
     }
     dom.expFileInput.value = ''
     updateExpCharCount()

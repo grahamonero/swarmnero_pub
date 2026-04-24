@@ -1305,10 +1305,46 @@ export async function showThread(rootPubkey, rootTimestamp, focusReply = false) 
     threadFileInput.click()
   })
 
-  // Handle file selection
+  // Handle file selection. Images/videos go through the media pipeline so
+  // EXIF stripping still applies — otherwise they'd hit storeFile which
+  // keeps the raw bytes and original filename.
   threadFileInput.addEventListener('change', (e) => {
     const files = Array.from(e.target.files)
     for (const file of files) {
+      if (file.type?.startsWith('image/') || file.type?.startsWith('video/')) {
+        threadPendingMedia.push(file)
+        const div = document.createElement('div')
+        div.className = 'media-preview-item'
+        if (file.type.startsWith('video/')) {
+          div.innerHTML = `
+            <div class="video-preview-icon">&#127909;</div>
+            <span class="file-preview-name">${file.name.slice(0, 20)}${file.name.length > 20 ? '...' : ''}</span>
+            <button class="remove-media" type="button">&times;</button>
+          `
+          div.querySelector('.remove-media').addEventListener('click', () => {
+            const index = threadPendingMedia.indexOf(file)
+            if (index > -1) threadPendingMedia.splice(index, 1)
+            div.remove()
+          })
+          threadMediaPreview.appendChild(div)
+        } else {
+          const reader = new FileReader()
+          reader.onload = (ev) => {
+            div.innerHTML = `
+              <img src="${ev.target.result}" alt="preview">
+              <button class="remove-media" type="button">&times;</button>
+            `
+            div.querySelector('.remove-media').addEventListener('click', () => {
+              const index = threadPendingMedia.indexOf(file)
+              if (index > -1) threadPendingMedia.splice(index, 1)
+              div.remove()
+            })
+            threadMediaPreview.appendChild(div)
+          }
+          reader.readAsDataURL(file)
+        }
+        continue
+      }
       threadPendingFiles.push(file)
       const div = document.createElement('div')
       div.className = 'media-preview-item file-preview'

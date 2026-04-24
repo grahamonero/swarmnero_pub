@@ -1018,18 +1018,32 @@ export async function renderPosts(posts, refreshUI) {
       fileInput.addEventListener('change', () => {
         const pending = inlineReplyMedia.get(form) || { media: [], files: [] }
         for (const file of fileInput.files) {
-          pending.files.push(file)
-          // Show preview
+          // Route images/videos to the media queue so EXIF stripping runs.
+          const isImageOrVideo = file.type?.startsWith('image/') || file.type?.startsWith('video/')
           const previewItem = document.createElement('div')
-          previewItem.className = 'media-preview-item file-preview'
-          previewItem.innerHTML = `<span class="preview-filename">📎 ${escapeHtml(file.name)}</span>`
+          if (isImageOrVideo) {
+            pending.media.push(file)
+            previewItem.className = 'media-preview-item'
+            if (file.type.startsWith('video/')) {
+              previewItem.innerHTML = `<span class="preview-filename">📹 ${escapeHtml(file.name)}</span>`
+            } else {
+              const img = document.createElement('img')
+              img.src = URL.createObjectURL(file)
+              previewItem.appendChild(img)
+            }
+          } else {
+            pending.files.push(file)
+            previewItem.className = 'media-preview-item file-preview'
+            previewItem.innerHTML = `<span class="preview-filename">📎 ${escapeHtml(file.name)}</span>`
+          }
           const removeBtn = document.createElement('button')
           removeBtn.className = 'remove-preview'
           removeBtn.textContent = '×'
           removeBtn.onclick = (e) => {
             e.stopPropagation()
-            const idx = pending.files.indexOf(file)
-            if (idx > -1) pending.files.splice(idx, 1)
+            const queue = isImageOrVideo ? pending.media : pending.files
+            const idx = queue.indexOf(file)
+            if (idx > -1) queue.splice(idx, 1)
             previewItem.remove()
           }
           previewItem.appendChild(removeBtn)
