@@ -6714,6 +6714,11 @@ body.duplicate-instance-active .paywall-unlock-btn {
   font-size: 12px;
   line-height: 1.45;
 }
+/* Explicit override — .metadata-warning-hint { display:flex } above would
+   otherwise win specificity ties against the global .hidden rule that
+   appears earlier in the stylesheet, causing the warning to show even when
+   no video/file is attached. */
+.metadata-warning-hint.hidden { display: none; }
 .metadata-warning-hint .hint-icon { flex-shrink: 0; font-size: 13px; line-height: 1.5; }
 .metadata-warning-hint .hint-text { color: #d29922; }
 .metadata-warning-hint strong { color: #e6edf3; font-weight: 600; }
