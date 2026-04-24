@@ -50,23 +50,25 @@ function isAuthorFollowed(authorPubkey) {
 async function renderMediaInto(container, authorPubkey, m) {
   const trusted = isAuthorFollowed(authorPubkey)
   const autoThreshold = trusted ? AUTO_LOAD_THRESHOLD_BYTES : MAX_PEER_FILE_BYTES
-
-  console.log('[renderMediaInto] begin', { authorPubkey: authorPubkey?.slice(0,12), trusted, m })
+  // Our own uploads: no need to probe a "peer" drive for size — we have the
+  // bytes locally. getPeerEntryInfo would hang here because it opens a
+  // read-only view of our own drive and waits on peerDrive.update() which
+  // never fires for a drive we own.
+  const isOwnMedia = state.media && m.driveKey === state.media.driveKey
 
   try {
-    // Cheap metadata probe first — avoids downloading a huge file only to
-    // realize we should have gated it behind a badge.
-    const info = await state.media.getPeerEntryInfo(m.driveKey, m.path).catch(() => null)
-    console.log('[renderMediaInto] peer info:', info)
+    if (!isOwnMedia) {
+      // Cheap metadata probe first — avoids downloading a huge file only to
+      // realize we should have gated it behind a badge.
+      const info = await state.media.getPeerEntryInfo(m.driveKey, m.path).catch(() => null)
 
-    if (info && info.size > autoThreshold) {
-      console.log('[renderMediaInto] over threshold, badge')
-      renderLargeMediaBadge(container, m, info.size)
-      return
+      if (info && info.size > autoThreshold) {
+        renderLargeMediaBadge(container, m, info.size)
+        return
+      }
     }
 
     const url = await state.media.getImageUrl(m.driveKey, m.path, { noSizeCap: trusted })
-    console.log('[renderMediaInto] getImageUrl →', url ? 'got url' : 'null')
     if (url) {
       appendMediaElement(container, m, url)
       return
@@ -80,8 +82,6 @@ async function renderMediaInto(container, authorPubkey, m) {
       if (info2 && info2.size > MAX_PEER_FILE_BYTES) {
         renderLargeMediaBadge(container, m, info2.size)
       }
-    } else {
-      console.warn('[renderMediaInto] own media but URL came back null — this is the bug we are chasing')
     }
   } catch (err) {
     console.error('Error loading media:', err)
