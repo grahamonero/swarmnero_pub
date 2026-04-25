@@ -151,6 +151,21 @@
                 <p class="paywall-hint">Your post body above will be encrypted. Only buyers who pay this price in XMR will be able to read it. Your wallet must be unlocked to create paywalled posts.</p>
               </div>
             </div>
+
+            <!-- Content warning toggle and field -->
+            <div class="cw-section">
+              <label class="cw-toggle">
+                <input type="checkbox" id="expCwToggle">
+                <span class="cw-toggle-label">⚠ Add content warning</span>
+              </label>
+              <div id="expCwFields" class="cw-fields hidden">
+                <div class="cw-field">
+                  <label for="expCwLabel">Warning label (shown in place of the post until revealed)</label>
+                  <input type="text" id="expCwLabel" maxlength="200" placeholder="e.g. spoilers, NSFW, politics">
+                  <div class="cw-char-count"><span id="expCwCharCount">0</span> / 200</div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="expanded-composer-footer">
             <span class="char-count"><span id="expCharCount">0</span> characters</span>

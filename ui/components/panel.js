@@ -1079,14 +1079,34 @@ export async function showThread(rootPubkey, rootTimestamp, focusReply = false) 
 
     const hasMedia = post.media && post.media.length > 0
 
+    const rawCw = (typeof post.cw === 'string') ? post.cw.trim() : ''
+    const cwLabel = (rawCw && rawCw.length <= 200) ? rawCw : ''
+    const panelContentHtml = `<div class="thread-post-content">${renderMarkdown(post.content || '')}</div>`
+    const panelMediaHtml = hasMedia ? `<div class="thread-post-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''
+    const panelBodyHtml = cwLabel ? `
+      <div class="cw-wrapper" data-pubkey="${safePk}" data-timestamp="${safeTs}">
+        <div class="cw-placeholder">
+          <span class="cw-icon">⚠</span>
+          <span class="cw-label">${escapeHtml(cwLabel)}</span>
+          <button class="cw-reveal-btn" type="button">Show content</button>
+        </div>
+        <div class="cw-content hidden">
+          ${panelContentHtml}
+          ${panelMediaHtml}
+        </div>
+      </div>
+    ` : `
+      ${panelContentHtml}
+      ${panelMediaHtml}
+    `
+
     return `
       <div class="thread-post ${isRoot ? 'thread-root' : 'thread-reply'}" data-pubkey="${safePk}" data-timestamp="${safeTs}">
         <div class="thread-post-header">
           <span class="thread-post-author">${escapeHtml(displayName)}</span>
           <span class="thread-post-time">${formatTime(post.timestamp)}</span>
         </div>
-        <div class="thread-post-content">${renderMarkdown(post.content || '')}</div>
-        ${hasMedia ? `<div class="thread-post-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''}
+        ${panelBodyHtml}
         <div class="thread-post-actions">
           ${!isOwnPost ? `<button class="action-btn thread-like-btn ${liked ? 'liked' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}">
             <span class="action-icon">${liked ? '\u2764' : '\u2661'}</span>
@@ -1147,6 +1167,18 @@ export async function showThread(rootPubkey, rootTimestamp, focusReply = false) 
 
   // Store current reply target
   let replyTarget = { pubkey: thread.pubkey, timestamp: thread.timestamp }
+
+  // Content-warning reveal handlers (thread panel)
+  dom.panelContent.querySelectorAll('.cw-reveal-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const wrapper = btn.closest('.cw-wrapper')
+      if (!wrapper) return
+      wrapper.classList.add('cw-revealed')
+      const content = wrapper.querySelector('.cw-content')
+      if (content) content.classList.remove('hidden')
+    })
+  })
 
   // Add like handlers
   dom.panelContent.querySelectorAll('.thread-like-btn').forEach(btn => {

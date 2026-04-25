@@ -389,6 +389,17 @@ let refreshUICallback = null
 // Track pending media/files per inline reply form (keyed by form element)
 const inlineReplyMedia = new WeakMap() // form -> { media: File[], files: File[] }
 
+// Default UI collapse depth for nested replies. Anything past this depth is
+// hidden behind a "+N more replies" stub until the user explicitly expands
+// that thread. The parser (lib/events.js) enforces a separate hard cap of
+// MAX_REPLY_DEPTH for DoS protection — this is purely a render-layer default.
+const UI_REPLY_COLLAPSE_DEPTH = 3
+
+// Per-post expansion state: "<pubkey>:<timestamp>" of post roots whose deep
+// replies the user has chosen to reveal. Cleared by resetTimelinePagination
+// on account switch / major view change.
+const expandedReplyThreads = new Set()
+
 // Flag to prevent renderPosts from overwriting center column profile/thread views
 let centerViewActive = false
 
@@ -451,6 +462,7 @@ export function scheduleRefresh(refreshUI) {
  */
 export function resetTimelinePagination() {
   state.timelineVisibleCount = state.timelinePageSize
+  expandedReplyThreads.clear()
 }
 
 /**
@@ -600,8 +612,17 @@ export async function renderPosts(posts, refreshUI) {
     const liked = hasLiked(posts, myPubkey, post.pubkey, post.timestamp)
     const reposted = hasReposted(posts, myPubkey, post.pubkey, post.timestamp)
 
-    // Get all replies in thread (including nested replies to replies)
-    const replies = getAllRepliesFlat(posts, post.pubkey, post.timestamp)
+    // Get all replies in thread (including nested replies to replies).
+    // The parser caps recursion at MAX_REPLY_DEPTH for DoS protection; here we
+    // apply a softer UI-layer collapse that hides replies deeper than
+    // UI_REPLY_COLLAPSE_DEPTH behind a "+N more replies" stub.
+    const allRepliesInThread = getAllRepliesFlat(posts, post.pubkey, post.timestamp)
+    const threadKey = `${post.pubkey}:${post.timestamp}`
+    const isExpanded = expandedReplyThreads.has(threadKey)
+    const replies = isExpanded
+      ? allRepliesInThread
+      : allRepliesInThread.filter(r => r._depth < UI_REPLY_COLLAPSE_DEPTH)
+    const hiddenByDepth = allRepliesInThread.length - replies.length
 
     // Find hidden replies - people who replied according to OP's reply_metadata but we don't follow
     const replyMetadata = posts.filter(e =>
@@ -610,8 +631,10 @@ export async function renderPosts(posts, refreshUI) {
       e.post_timestamp === post.timestamp
     )
 
-    // Filter to repliers we don't follow and haven't already seen
-    const visibleReplierPubkeys = new Set(replies.map(r => r.pubkey))
+    // Filter to repliers we don't follow and haven't already seen. Use the
+    // full thread (including depth-collapsed) so a replier who is rendered
+    // behind the "+N more" stub still counts as "already known".
+    const visibleReplierPubkeys = new Set(allRepliesInThread.map(r => r.pubkey))
     const hiddenRepliers = replyMetadata
       .map(m => m.replier)
       .filter(r => {
@@ -625,7 +648,6 @@ export async function renderPosts(posts, refreshUI) {
       .filter((r, i, arr) => arr.findIndex(x => x.pubkey === r.pubkey) === i)
 
     // Build hidden replies indicator HTML
-    const totalReplies = replies.length + hiddenRepliers.length
     const hiddenRepliesHtml = hiddenRepliers.length > 0 ? `
       <div class="hidden-replies-indicator">
         <span class="hidden-count">${hiddenRepliers.length} hidden ${hiddenRepliers.length === 1 ? 'reply' : 'replies'}</span>
@@ -652,8 +674,9 @@ export async function renderPosts(posts, refreshUI) {
       ${repostInfo.comment ? `<div class="repost-comment">${renderMarkdown(repostInfo.comment)}</div>` : ''}
     ` : ''
 
-    // Render replies inline
-    const repliesHtml = replies.length > 0 ? `
+    // Render replies inline. Render the wrapper if we have any visible
+    // replies OR a collapsed-deep stub to display.
+    const repliesHtml = (replies.length > 0 || hiddenByDepth > 0) ? `
       <div class="post-replies">
         ${replies.map(reply => {
           const replyAuthor = getDisplayName(reply.pubkey, state.identity, state.myProfile, state.peerProfiles)
@@ -711,12 +734,25 @@ export async function renderPosts(posts, refreshUI) {
             </div>
           `
         }).join('')}
+        ${hiddenByDepth > 0 ? `
+          <div class="replies-collapsed-stub">
+            <button class="replies-expand-btn" type="button">
+              +${hiddenByDepth} more ${hiddenByDepth === 1 ? 'reply' : 'replies'}
+            </button>
+          </div>
+        ` : ''}
       </div>
     ` : ''
 
     const supporterManager = getSupporterManager()
     const isSupporter = supporterManager?.isListed(post.pubkey)
     const supporterBadge = isSupporter ? '<span class="supporter-badge" title="Supporter"><span class="badge-icon">★</span>Supporter</span>' : ''
+
+    // Content warning (shown above post body, blurs content until revealed).
+    // Strictly optional; only a non-empty, trimmed string under the cap is
+    // rendered. escapeHtml is mandatory — the label comes from peer input.
+    const rawCw = (typeof post.cw === 'string') ? post.cw.trim() : ''
+    const cwLabel = (rawCw && rawCw.length <= 200) ? rawCw : ''
 
     // Paywall rendering: locked vs unlocked
     const paywalled = isPaywalledPost(post)
@@ -778,8 +814,22 @@ export async function renderPosts(posts, refreshUI) {
               : ''}
         </div>
         <div class="post-body">
-          ${postBodyHtml}
-          ${postHasMedia ? `<div class="post-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''}
+          ${cwLabel ? `
+            <div class="cw-wrapper" data-pubkey="${safePk}" data-timestamp="${safeTs}">
+              <div class="cw-placeholder">
+                <span class="cw-icon">⚠</span>
+                <span class="cw-label">${escapeHtml(cwLabel)}</span>
+                <button class="cw-reveal-btn" type="button">Show content</button>
+              </div>
+              <div class="cw-content hidden">
+                ${postBodyHtml}
+                ${postHasMedia ? `<div class="post-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''}
+              </div>
+            </div>
+          ` : `
+            ${postBodyHtml}
+            ${postHasMedia ? `<div class="post-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''}
+          `}
         </div>
         <div class="post-actions">
           ${!isOwnPost ? `<button class="action-btn like-btn ${liked ? 'liked' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}" title="Like">
@@ -913,6 +963,31 @@ export async function renderPosts(posts, refreshUI) {
       if (onAuthorClickCallback) {
         onAuthorClickCallback(pubkey, state.currentTimeline)
       }
+    })
+  })
+
+  // Content-warning reveal handlers
+  dom.postsEl.querySelectorAll('.cw-reveal-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const wrapper = btn.closest('.cw-wrapper')
+      if (!wrapper) return
+      wrapper.classList.add('cw-revealed')
+      const content = wrapper.querySelector('.cw-content')
+      if (content) content.classList.remove('hidden')
+    })
+  })
+
+  // Reply-collapse expand handlers
+  dom.postsEl.querySelectorAll('.replies-expand-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const postEl = btn.closest('.post')
+      if (!postEl) return
+      const pk = postEl.dataset.pubkey
+      const ts = postEl.dataset.timestamp
+      if (pk && ts) expandedReplyThreads.add(`${pk}:${ts}`)
+      renderPosts(posts, refreshUI)
     })
   })
 
@@ -1555,6 +1630,27 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
     const safePk = escapeHtml(post.pubkey || '')
     const safeTs = escapeHtml(String(post.timestamp || ''))
 
+    const rawCw = (typeof post.cw === 'string') ? post.cw.trim() : ''
+    const cwLabel = (rawCw && rawCw.length <= 200) ? rawCw : ''
+    const threadContentHtml = `<div class="thread-post-content">${renderMarkdown(post.content || '')}</div>`
+    const threadMediaHtml = hasMedia ? `<div class="thread-post-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''
+    const threadBodyHtml = cwLabel ? `
+      <div class="cw-wrapper" data-pubkey="${safePk}" data-timestamp="${safeTs}">
+        <div class="cw-placeholder">
+          <span class="cw-icon">⚠</span>
+          <span class="cw-label">${escapeHtml(cwLabel)}</span>
+          <button class="cw-reveal-btn" type="button">Show content</button>
+        </div>
+        <div class="cw-content hidden">
+          ${threadContentHtml}
+          ${threadMediaHtml}
+        </div>
+      </div>
+    ` : `
+      ${threadContentHtml}
+      ${threadMediaHtml}
+    `
+
     return `
       <div class="thread-post ${isRoot ? 'thread-root' : 'thread-reply'}" data-pubkey="${safePk}" data-timestamp="${safeTs}">
         <div class="thread-post-header">
@@ -1562,8 +1658,7 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
           <span class="thread-post-author">${escapeHtml(displayName)}</span>${getOnlineDotHtml(post.pubkey)}${threadSupporterBadge}
           <span class="thread-post-time">${formatTime(post.timestamp)}</span>
         </div>
-        <div class="thread-post-content">${renderMarkdown(post.content || '')}</div>
-        ${hasMedia ? `<div class="thread-post-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''}
+        ${threadBodyHtml}
         <div class="thread-post-actions">
           ${!isOwnPost ? `<button class="action-btn center-like-btn ${liked ? 'liked' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}">
             <span class="action-icon">${liked ? '\u2764' : '\u2661'}</span>
@@ -1625,6 +1720,18 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
       if (refreshUICallback) refreshUICallback()
     })
   }
+
+  // Content-warning reveal handlers (thread view)
+  dom.postsEl.querySelectorAll('.cw-reveal-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const wrapper = btn.closest('.cw-wrapper')
+      if (!wrapper) return
+      wrapper.classList.add('cw-revealed')
+      const content = wrapper.querySelector('.cw-content')
+      if (content) content.classList.remove('hidden')
+    })
+  })
 
   // Like handlers
   dom.postsEl.querySelectorAll('.center-like-btn').forEach(btn => {
