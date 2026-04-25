@@ -165,6 +165,221 @@ function appendMediaElement(container, m, url) {
   }
 }
 
+// Render a list of media descriptors. Images group into a carousel; videos and
+// files render inline individually (they don't lightbox the same way).
+//   1 image  -> full-width inline
+//   2-3      -> equal-width grid row
+//   4+       -> first 3 tiles + "+N more" overflow tile
+// Any image tile click opens a swipeable lightbox across the full image set.
+async function renderMediaCollection(container, authorPubkey, mediaList) {
+  if (!Array.isArray(mediaList) || mediaList.length === 0) return
+
+  const images = []
+  const rest = []
+  for (const m of mediaList) {
+    const isImage = (m?.mimeType && m.mimeType.startsWith('image/')) && m.type !== 'video'
+    if (isImage) images.push(m)
+    else rest.push(m)
+  }
+
+  if (images.length === 0) {
+    for (const m of rest) await renderMediaInto(container, authorPubkey, m)
+    return
+  }
+
+  if (images.length === 1 && rest.length === 0) {
+    await renderMediaInto(container, authorPubkey, images[0])
+    return
+  }
+
+  const visibleCount = Math.min(images.length, 3)
+  const overflow = images.length - visibleCount
+
+  const grid = document.createElement('div')
+  grid.className = `carousel-grid carousel-grid-${visibleCount}`
+  container.appendChild(grid)
+
+  for (let i = 0; i < visibleCount; i++) {
+    const tile = document.createElement('button')
+    tile.type = 'button'
+    tile.className = 'carousel-tile'
+    tile.setAttribute('aria-label', `Image ${i + 1} of ${images.length}`)
+    await renderCarouselTile(tile, authorPubkey, images[i])
+    if (i === visibleCount - 1 && overflow > 0) {
+      const badge = document.createElement('span')
+      badge.className = 'carousel-overflow-badge'
+      badge.textContent = `+${overflow}`
+      tile.appendChild(badge)
+    }
+    tile.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      openLightbox(authorPubkey, images, i)
+    })
+    grid.appendChild(tile)
+  }
+
+  for (const m of rest) await renderMediaInto(container, authorPubkey, m)
+}
+
+// Populate a tile with either the inline thumb (if the author shipped one) or
+// the on-drive image. Thumbnail decode is wrapped in try/catch; on any failure
+// we drop a placeholder icon in so render never crashes the post.
+async function renderCarouselTile(tile, authorPubkey, m) {
+  try {
+    if (m.thumb && typeof m.thumb === 'string' && m.thumb.startsWith('data:image/')) {
+      const img = document.createElement('img')
+      img.src = m.thumb
+      img.alt = 'attachment'
+      img.className = 'carousel-thumb'
+      img.onerror = () => replaceWithPlaceholder(tile)
+      tile.appendChild(img)
+      return
+    }
+  } catch (err) {
+    console.warn('[Carousel] thumb render failed, falling back to full fetch:', err?.message)
+  }
+
+  try {
+    const trusted = isAuthorFollowed(authorPubkey)
+    const url = await state.media.getImageUrl(m.driveKey, m.path, { noSizeCap: trusted })
+    if (!url) {
+      replaceWithPlaceholder(tile)
+      return
+    }
+    const img = document.createElement('img')
+    img.src = url
+    img.alt = 'attachment'
+    img.className = 'carousel-thumb'
+    img.onerror = () => replaceWithPlaceholder(tile)
+    tile.appendChild(img)
+  } catch (err) {
+    console.warn('[Carousel] full fetch failed, rendering placeholder:', err?.message)
+    replaceWithPlaceholder(tile)
+  }
+}
+
+function replaceWithPlaceholder(tile) {
+  tile.innerHTML = ''
+  const ph = document.createElement('span')
+  ph.className = 'carousel-placeholder'
+  ph.textContent = '\u{1F5BC}'
+  tile.appendChild(ph)
+}
+
+// Simple swipeable lightbox. Dismiss on overlay click / Esc. Left-right arrow
+// keys and on-screen prev/next for navigation. Pointer drag also swipes.
+function openLightbox(authorPubkey, images, startIndex) {
+  document.querySelector('.carousel-lightbox')?.remove()
+
+  const overlay = document.createElement('div')
+  overlay.className = 'carousel-lightbox'
+
+  const stage = document.createElement('div')
+  stage.className = 'carousel-lightbox-stage'
+  const imgEl = document.createElement('img')
+  imgEl.className = 'carousel-lightbox-image'
+  imgEl.alt = ''
+  stage.appendChild(imgEl)
+
+  const prev = document.createElement('button')
+  prev.type = 'button'
+  prev.className = 'carousel-lightbox-nav carousel-lightbox-prev'
+  prev.textContent = '\u2039'
+  prev.setAttribute('aria-label', 'Previous image')
+
+  const next = document.createElement('button')
+  next.type = 'button'
+  next.className = 'carousel-lightbox-nav carousel-lightbox-next'
+  next.textContent = '\u203A'
+  next.setAttribute('aria-label', 'Next image')
+
+  const close = document.createElement('button')
+  close.type = 'button'
+  close.className = 'carousel-lightbox-close'
+  close.textContent = '\u00D7'
+  close.setAttribute('aria-label', 'Close')
+
+  const counter = document.createElement('div')
+  counter.className = 'carousel-lightbox-counter'
+
+  overlay.appendChild(stage)
+  overlay.appendChild(prev)
+  overlay.appendChild(next)
+  overlay.appendChild(close)
+  overlay.appendChild(counter)
+  document.body.appendChild(overlay)
+
+  let idx = Math.max(0, Math.min(startIndex, images.length - 1))
+  let currentUrl = null
+
+  async function showAt(i) {
+    idx = (i + images.length) % images.length
+    counter.textContent = `${idx + 1} / ${images.length}`
+    prev.disabled = images.length < 2
+    next.disabled = images.length < 2
+
+    if (currentUrl) {
+      try { URL.revokeObjectURL(currentUrl) } catch {}
+      currentUrl = null
+    }
+
+    const m = images[idx]
+    imgEl.src = ''
+    try {
+      const trusted = isAuthorFollowed(authorPubkey)
+      const url = await state.media.getImageUrl(m.driveKey, m.path, { noSizeCap: trusted })
+      if (url) {
+        currentUrl = url
+        imgEl.src = url
+      } else if (m.thumb && m.thumb.startsWith('data:image/')) {
+        imgEl.src = m.thumb
+      } else {
+        imgEl.alt = 'Image failed to load'
+      }
+    } catch (err) {
+      console.warn('[Carousel] lightbox load failed:', err?.message)
+      if (m.thumb && m.thumb.startsWith('data:image/')) imgEl.src = m.thumb
+    }
+  }
+
+  function dismiss() {
+    if (currentUrl) {
+      try { URL.revokeObjectURL(currentUrl) } catch {}
+    }
+    document.removeEventListener('keydown', onKey)
+    overlay.remove()
+  }
+
+  function onKey(e) {
+    if (e.key === 'Escape') dismiss()
+    else if (e.key === 'ArrowLeft') showAt(idx - 1)
+    else if (e.key === 'ArrowRight') showAt(idx + 1)
+  }
+
+  prev.addEventListener('click', (e) => { e.stopPropagation(); showAt(idx - 1) })
+  next.addEventListener('click', (e) => { e.stopPropagation(); showAt(idx + 1) })
+  close.addEventListener('click', (e) => { e.stopPropagation(); dismiss() })
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss() })
+  stage.addEventListener('click', (e) => e.stopPropagation())
+  document.addEventListener('keydown', onKey)
+
+  // Pointer swipe
+  let pointerStartX = null
+  stage.addEventListener('pointerdown', (e) => { pointerStartX = e.clientX })
+  stage.addEventListener('pointerup', (e) => {
+    if (pointerStartX == null) return
+    const dx = e.clientX - pointerStartX
+    pointerStartX = null
+    if (Math.abs(dx) > 40) {
+      if (dx < 0) showAt(idx + 1)
+      else showAt(idx - 1)
+    }
+  })
+
+  showAt(idx)
+}
+
 // Callback for author clicks (set by app.js)
 let onAuthorClickCallback = null
 // Callback for thread clicks (set by app.js)
@@ -1263,8 +1478,10 @@ export async function renderPosts(posts, refreshUI) {
     }
 
     if (post && mediaList && mediaList.length > 0 && state.media) {
-      for (const m of mediaList) {
-        await renderMediaInto(mediaContainer, post.pubkey, m)
+      try {
+        await renderMediaCollection(mediaContainer, post.pubkey, mediaList)
+      } catch (err) {
+        console.error('Error rendering post media collection:', err)
       }
     }
   }
@@ -1278,12 +1495,10 @@ export async function renderPosts(posts, refreshUI) {
     // Find the reply with this pubkey+timestamp
     const reply = posts.find(p => p.type === 'reply' && p.pubkey === pubkey && p.timestamp === ts)
     if (reply && reply.media && reply.media.length > 0 && state.media) {
-      for (const m of reply.media) {
-        try {
-          await renderMediaInto(mediaContainer, reply.pubkey, m)
-        } catch (err) {
-          console.error('Error loading reply media:', err)
-        }
+      try {
+        await renderMediaCollection(mediaContainer, reply.pubkey, reply.media)
+      } catch (err) {
+        console.error('Error rendering reply media collection:', err)
       }
     }
   }
@@ -1529,8 +1744,10 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
     const ts = parseInt(mediaContainer.dataset.mediaTs)
     const post = timeline.find(p => (p.type === 'post' || p.type === 'reply') && p.pubkey === pubkey && p.timestamp === ts)
     if (post && post.media && post.media.length > 0 && state.media) {
-      for (const m of post.media) {
-        await renderMediaInto(mediaContainer, post.pubkey, m)
+      try {
+        await renderMediaCollection(mediaContainer, post.pubkey, post.media)
+      } catch (err) {
+        console.error('Error rendering thread media collection:', err)
       }
     }
   }

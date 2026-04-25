@@ -5,7 +5,7 @@
 import { state, dom } from '../state.js'
 import { wrapSelection, insertAtCursor } from '../utils/dom.js'
 import { initEmojiPicker, toggleEmojiPicker } from '../utils/emoji.js'
-import { createPostEvent } from '../../lib/events.js'
+import { createPostEvent, MAX_MEDIA_PER_POST } from '../../lib/events.js'
 import * as wallet from '../../lib/wallet.js'
 import { extractHashtags } from '../../lib/tag-extractor.js'
 import { createPaywalledPost, persistContentKey, cacheUnlockedContent } from '../../lib/paywall.js'
@@ -259,10 +259,13 @@ async function createExpandedPost(refreshUI) {
 
   dom.expPostBtn.disabled = true
   try {
-    // Upload pending media
+    // Upload pending media. Images go through storeImage individually (the
+    // EXIF stripper runs per-file) — no spread, no early-exit, no shared
+    // buffer reuse that could publish an unstripped image.
     const uploadedMedia = []
     if (state.media && expPendingMedia.length > 0) {
       for (const file of expPendingMedia) {
+        if (uploadedMedia.length >= MAX_MEDIA_PER_POST) break
         let result
         if (file.type.startsWith('video/')) {
           result = await state.media.storeVideo(file, file.name)
@@ -464,13 +467,21 @@ export function initComposer(refreshUI) {
   // Handle media selection
   dom.expMediaInput.addEventListener('change', (e) => {
     const files = Array.from(e.target.files)
+    let rejected = 0
     for (const file of files) {
       if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+        if (expPendingMedia.length >= MAX_MEDIA_PER_POST) {
+          rejected++
+          continue
+        }
         expPendingMedia.push(file)
         addExpMediaPreview(file)
       }
     }
     dom.expMediaInput.value = ''
+    if (rejected > 0) {
+      alert(`Only ${MAX_MEDIA_PER_POST} attachments allowed per post. ${rejected} file(s) were skipped.`)
+    }
     updateExpCharCount()
   })
 
@@ -484,8 +495,13 @@ export function initComposer(refreshUI) {
   // runs — otherwise they'd hit storeFile which keeps raw bytes + filename.
   dom.expFileInput.addEventListener('change', (e) => {
     const files = Array.from(e.target.files)
+    let rejected = 0
     for (const file of files) {
       if (file.type?.startsWith('image/') || file.type?.startsWith('video/')) {
+        if (expPendingMedia.length >= MAX_MEDIA_PER_POST) {
+          rejected++
+          continue
+        }
         expPendingMedia.push(file)
         addExpMediaPreview(file)
       } else {
@@ -494,6 +510,9 @@ export function initComposer(refreshUI) {
       }
     }
     dom.expFileInput.value = ''
+    if (rejected > 0) {
+      alert(`Only ${MAX_MEDIA_PER_POST} image/video attachments allowed per post. ${rejected} file(s) were skipped.`)
+    }
     updateExpCharCount()
   })
 
