@@ -665,20 +665,50 @@ async function appendReleaseLengthToVersion() {
 }
 
 // Pear fetches new releases in the background and caches them, but only
-// applies the new version on the next launch. Listen for update-ready events
-// and show a banner with a Restart button so users can pick up the update
-// without waiting for a future relaunch.
+// applies the new version on the next launch. We surface the cached update
+// two ways:
+//
+//   1. Subscribe to Pear.updates() — fires when a fresh release lands.
+//   2. Poll Pear.versions() every 60s and compare the current release
+//      length against the one we captured at startup. If the running
+//      release length changes mid-session, show the banner. This is the
+//      reliable path: the stream-based event in (1) can be missed if the
+//      update arrived before we subscribed, or if the runtime variant
+//      doesn't emit `data` for already-cached updates.
+//
+// Both paths converge on the same blue restart banner.
 function initUpdateListener() {
-  if (typeof Pear === 'undefined' || typeof Pear.updates !== 'function') return
-  try {
-    const stream = Pear.updates()
-    stream.on('data', (info) => {
-      console.log('[App] Update ready:', info)
-      showUpdateReadyBanner()
-    })
-    stream.on('error', (err) => console.warn('[App] Pear.updates error:', err))
-  } catch (err) {
-    console.warn('[App] Pear.updates unavailable:', err)
+  if (typeof Pear === 'undefined') return
+  if (typeof Pear.updates === 'function') {
+    try {
+      const stream = Pear.updates()
+      stream.on('data', (info) => {
+        console.log('[App] Update ready (stream):', info)
+        showUpdateReadyBanner()
+      })
+      stream.on('error', (err) => console.warn('[App] Pear.updates error:', err))
+    } catch (err) {
+      console.warn('[App] Pear.updates unavailable:', err)
+    }
+  }
+  if (typeof Pear.versions === 'function') {
+    let startupLength = null
+    Pear.versions().then(v => { startupLength = v?.app?.length ?? null }).catch(() => {})
+    setInterval(async () => {
+      try {
+        const v = await Pear.versions()
+        const len = v?.app?.length
+        if (startupLength == null && len != null) {
+          startupLength = len
+          return
+        }
+        if (len != null && startupLength != null && len !== startupLength) {
+          console.log('[App] Update ready (poll):', startupLength, '->', len)
+          showUpdateReadyBanner()
+          startupLength = len
+        }
+      } catch {}
+    }, 60 * 1000)
   }
 }
 
