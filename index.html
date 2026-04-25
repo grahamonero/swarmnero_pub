@@ -151,6 +151,36 @@
                 <p class="paywall-hint">Your post body above will be encrypted. Only buyers who pay this price in XMR will be able to read it. Your wallet must be unlocked to create paywalled posts.</p>
               </div>
             </div>
+
+            <!-- Poll toggle and fields -->
+            <div class="paywall-section">
+              <label class="paywall-toggle">
+                <input type="checkbox" id="expPollToggle">
+                <span class="paywall-toggle-label">&#128200; Add poll</span>
+              </label>
+              <div id="expPollFields" class="paywall-fields hidden">
+                <div class="paywall-field">
+                  <label for="expPollQuestion">Question (optional &mdash; composer text above is used if blank)</label>
+                  <input type="text" id="expPollQuestion" maxlength="280" placeholder="What's your question?">
+                </div>
+                <div class="paywall-field">
+                  <label>Options (2&ndash;10, max 100 chars each)</label>
+                  <div id="expPollOptionsList"></div>
+                  <button type="button" id="expPollAddOptionBtn" class="btn-secondary" style="margin-top:6px;">+ Add option</button>
+                </div>
+                <div class="paywall-field">
+                  <label for="expPollDuration">Duration</label>
+                  <select id="expPollDuration">
+                    <option value="3600000">1 hour</option>
+                    <option value="21600000">6 hours</option>
+                    <option value="86400000" selected>1 day</option>
+                    <option value="259200000">3 days</option>
+                    <option value="604800000">1 week</option>
+                  </select>
+                </div>
+                <p class="paywall-hint">Votes are public and signed by each voter&apos;s feed &mdash; anyone replicating the feed can see who voted for what. Tallies are computed locally and de-duplicated per voter (latest vote wins).</p>
+              </div>
+            </div>
           </div>
           <div class="expanded-composer-footer">
             <span class="char-count"><span id="expCharCount">0</span> characters</span>
