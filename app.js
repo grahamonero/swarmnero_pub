@@ -1215,6 +1215,40 @@ async function continueInit(accountManager) {
   feed.markInfrastructureHost(syncHost)
   console.log('Feed initialized:', feed.swarmId.slice(0, 16) + '...')
 
+  // Restore the user's OWN supporter listing into SupporterManager from
+  // their feed. addPeerListings only ingests listings from peers we follow,
+  // not from our own feed, so after a fresh install / account import the
+  // self-badge would be missing until the local supporter-listings.json is
+  // rebuilt by hand. Scanning own feed once on startup recovers the badge
+  // automatically — the tx_proof already in the signed event is still
+  // valid and gets re-verified on-chain via addPeerListings.
+  try {
+    const ownEvents = await feed.read()
+    const myPubkey = identity.pubkeyHex
+    let latestListing = null
+    let latestProfile = null
+    for (const ev of ownEvents) {
+      if (ev.pubkey !== myPubkey) continue
+      if (ev.type === 'supporter_listing' && ev.tx_proof) {
+        if (!latestListing || (ev.timestamp || 0) > (latestListing.timestamp || 0)) {
+          latestListing = ev
+        }
+      } else if (ev.type === 'profile') {
+        if (!latestProfile || (ev.timestamp || 0) > (latestProfile.timestamp || 0)) {
+          latestProfile = ev
+        }
+      }
+    }
+    if (latestListing && !supporterManager.isListed(myPubkey)) {
+      const listingWithSwarmId = { ...latestListing, swarmId: feed.swarmId }
+      const profilesMap = latestProfile ? { [myPubkey]: latestProfile } : {}
+      await supporterManager.addPeerListings({ [myPubkey]: listingWithSwarmId }, profilesMap)
+      console.log('[App] Restored own supporter listing from feed')
+    }
+  } catch (err) {
+    console.warn('[App] Could not restore own supporter listing:', err.message)
+  }
+
   // Auto-follow official account for new users
   // Only if: 1) This is a new account (empty feed), 2) Not already following,
   // 3) NOT an imported account. Imported accounts already have a real profile
