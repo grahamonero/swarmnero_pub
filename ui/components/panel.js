@@ -10,14 +10,16 @@ import { initEmojiPicker, toggleEmojiPicker } from '../utils/emoji.js'
 import {
   buildThread,
   getInteractionCounts,
-  hasLiked,
   hasReposted,
   createReplyEvent,
-  createLikeEvent,
+  createReactionEvent,
+  getUserReaction,
+  isValidReactionEmoji,
   createRepostEvent,
   createFollowEvent,
   createUnfollowEvent
 } from '../../lib/events.js'
+import { emojis as EMOJI_PICKER_LIST } from '../utils/emoji.js'
 import * as wallet from '../../lib/wallet.js'
 import { getSupporterManager } from '../../lib/supporter-manager.js'
 import { savePeerProfilesDebounced } from '../../lib/peer-profile-cache.js'
@@ -1071,7 +1073,8 @@ export async function showThread(rootPubkey, rootTimestamp, focusReply = false) 
   function renderPost(post, isRoot = false) {
     const displayName = getDisplayName(post.pubkey, state.identity, state.myProfile, state.peerProfiles)
     const counts = getInteractionCounts(timeline, post.pubkey, post.timestamp)
-    const liked = hasLiked(timeline, myPubkey, post.pubkey, post.timestamp)
+    const panelReactions = counts.reactions || []
+    const panelMyReaction = getUserReaction(timeline, myPubkey, post.pubkey, post.timestamp)
     const reposted = hasReposted(timeline, myPubkey, post.pubkey, post.timestamp)
     const isOwnPost = post.pubkey === myPubkey
     const safePk = escapeHtml(post.pubkey || '')
@@ -1100,6 +1103,22 @@ export async function showThread(rootPubkey, rootTimestamp, focusReply = false) 
       ${panelMediaHtml}
     `
 
+    const chipsHtml = panelReactions.map(r => {
+      const mine = panelMyReaction === r.emoji
+      const cls = `reaction-chip${mine ? ' mine' : ''}`
+      const disabled = isOwnPost ? ' disabled' : ''
+      return `<button class="${cls}" data-pubkey="${safePk}" data-timestamp="${safeTs}" data-emoji="${escapeHtml(r.emoji)}"${disabled} title="React">
+        <span class="reaction-emoji">${escapeHtml(r.emoji)}</span>
+        <span class="reaction-count">${r.count}</span>
+      </button>`
+    }).join('')
+    const addHtml = !isOwnPost ? `<button class="reaction-add-btn panel-reaction-add" data-pubkey="${safePk}" data-timestamp="${safeTs}" title="Add reaction">
+      <span class="reaction-add-icon">+</span>
+    </button>
+    <div class="reaction-picker hidden panel-reaction-picker" data-pubkey="${safePk}" data-timestamp="${safeTs}">
+      <div class="reaction-picker-grid"></div>
+    </div>` : ''
+
     return `
       <div class="thread-post ${isRoot ? 'thread-root' : 'thread-reply'}" data-pubkey="${safePk}" data-timestamp="${safeTs}">
         <div class="thread-post-header">
@@ -1108,10 +1127,7 @@ export async function showThread(rootPubkey, rootTimestamp, focusReply = false) 
         </div>
         ${panelBodyHtml}
         <div class="thread-post-actions">
-          ${!isOwnPost ? `<button class="action-btn thread-like-btn ${liked ? 'liked' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}">
-            <span class="action-icon">${liked ? '\u2764' : '\u2661'}</span>
-            <span class="action-count">${counts.likes || ''}</span>
-          </button>` : '<span class="action-placeholder"></span>'}
+          <div class="reactions-cluster">${chipsHtml}${addHtml}</div>
           <button class="action-btn thread-repost-btn ${reposted ? 'reposted' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}">
             <span class="action-icon">\u21BB</span>
             <span class="action-count">${counts.reposts || ''}</span>
@@ -1180,24 +1196,69 @@ export async function showThread(rootPubkey, rootTimestamp, focusReply = false) 
     })
   })
 
-  // Add like handlers
-  dom.panelContent.querySelectorAll('.thread-like-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
+  // Reaction handlers (cluster-style)
+  const panelReact = async (toPubkey, postTimestamp, emoji) => {
+    if (!isValidReactionEmoji(emoji)) return
+    const current = getUserReaction(timeline, myPubkey, toPubkey, postTimestamp)
+    if (current === emoji) return
+    try {
+      await state.feed.append(createReactionEvent({ toPubkey, postTimestamp, emoji }))
+      if (refreshUICallback) await refreshUICallback()
+      await showThread(rootPubkey, rootTimestamp, false)
+    } catch (err) {
+      alert('Error: ' + err.message)
+    }
+  }
+
+  dom.panelContent.querySelectorAll('.reaction-chip').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      if (btn.disabled) return
       const toPubkey = btn.dataset.pubkey
       const postTimestamp = parseInt(btn.dataset.timestamp)
-      if (hasLiked(timeline, myPubkey, toPubkey, postTimestamp)) return
-      btn.disabled = true
-      try {
-        await state.feed.append(createLikeEvent({ toPubkey, postTimestamp }))
-        if (refreshUICallback) await refreshUICallback()
-        // Re-render thread
-        await showThread(rootPubkey, rootTimestamp, false)
-      } catch (err) {
-        alert('Error: ' + err.message)
-        btn.disabled = false
-      }
+      const emoji = btn.dataset.emoji
+      await panelReact(toPubkey, postTimestamp, emoji)
     })
   })
+
+  dom.panelContent.querySelectorAll('.panel-reaction-add').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const pk = btn.dataset.pubkey
+      const ts = btn.dataset.timestamp
+      const picker = dom.panelContent.querySelector(`.panel-reaction-picker[data-pubkey="${pk}"][data-timestamp="${ts}"]`)
+      if (!picker) return
+      dom.panelContent.querySelectorAll('.panel-reaction-picker').forEach(p => {
+        if (p !== picker) p.classList.add('hidden')
+      })
+      const grid = picker.querySelector('.reaction-picker-grid')
+      if (grid && !grid.dataset.populated) {
+        grid.dataset.populated = '1'
+        for (const em of EMOJI_PICKER_LIST) {
+          if (!isValidReactionEmoji(em)) continue
+          const emBtn = document.createElement('button')
+          emBtn.type = 'button'
+          emBtn.className = 'reaction-picker-btn'
+          emBtn.textContent = em
+          emBtn.addEventListener('click', async (evt) => {
+            evt.stopPropagation()
+            picker.classList.add('hidden')
+            await panelReact(pk, parseInt(ts), em)
+          })
+          grid.appendChild(emBtn)
+        }
+      }
+      picker.classList.toggle('hidden')
+    })
+  })
+
+  if (!dom.panelContent.dataset.reactionOutsideBound) {
+    dom.panelContent.dataset.reactionOutsideBound = '1'
+    dom.panelContent.addEventListener('click', (e) => {
+      if (e.target.closest('.panel-reaction-add') || e.target.closest('.panel-reaction-picker')) return
+      dom.panelContent.querySelectorAll('.panel-reaction-picker').forEach(p => p.classList.add('hidden'))
+    })
+  }
 
   // Add repost handlers
   dom.panelContent.querySelectorAll('.thread-repost-btn').forEach(btn => {

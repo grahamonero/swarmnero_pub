@@ -4,17 +4,18 @@
 
 import { state, dom } from '../state.js'
 import { escapeHtml, wrapSelection, insertAtCursor, safeAvatarUrl, safeWebsiteUrl } from '../utils/dom.js'
-import { initEmojiPicker } from '../utils/emoji.js'
+import { initEmojiPicker, emojis as EMOJI_PICKER_LIST } from '../utils/emoji.js'
 import { formatTime, getDisplayName, renderMarkdown, formatFileSize, getOnlineDotHtml } from '../utils/format.js'
 import {
   createDeleteEvent,
-  createLikeEvent,
+  createReactionEvent,
   createRepostEvent,
   createReplyEvent,
   createReplyMetadataEvent,
   createPollVoteEvent,
   getInteractionCounts,
-  hasLiked,
+  getUserReaction,
+  isValidReactionEmoji,
   hasReposted,
   getReplies,
   getAllRepliesFlat,
@@ -484,6 +485,114 @@ export function updatePostCount(timeline) {
 }
 
 /**
+ * Render the reaction cluster (emoji+count chips + "add" button) for a post
+ * or reply. Every emoji rendered here is passed through escapeHtml; ingest
+ * validation drops invalid shapes but old events on disk could bypass it.
+ */
+function renderReactionCluster(reactions, myReaction, pubkey, timestamp, { isOwn, inReply = false } = {}) {
+  const safePk = escapeHtml(pubkey || '')
+  const safeTs = escapeHtml(String(timestamp || ''))
+  const chips = reactions.map(r => {
+    const mine = myReaction === r.emoji
+    const cls = `reaction-chip${mine ? ' mine' : ''}`
+    const disabled = isOwn ? ' disabled' : ''
+    return `<button class="${cls}" data-pubkey="${safePk}" data-timestamp="${safeTs}" data-emoji="${escapeHtml(r.emoji)}"${disabled} title="React">
+      <span class="reaction-emoji">${escapeHtml(r.emoji)}</span>
+      <span class="reaction-count">${r.count}</span>
+    </button>`
+  }).join('')
+
+  // "Add reaction" button. Authors of their own post can't react to themselves.
+  const addBtn = !isOwn ? `<button class="reaction-add-btn" data-pubkey="${safePk}" data-timestamp="${safeTs}" title="Add reaction">
+    <span class="reaction-add-icon">+</span>
+  </button>` : ''
+
+  // Hidden picker panel. Populated on demand by wireReactionHandlers.
+  const picker = !isOwn ? `<div class="reaction-picker hidden" data-pubkey="${safePk}" data-timestamp="${safeTs}">
+    <div class="reaction-picker-grid"></div>
+  </div>` : ''
+
+  return `<div class="reactions-cluster${inReply ? ' reactions-cluster-reply' : ''}">${chips}${addBtn}${picker}</div>`
+}
+
+/**
+ * Wire click handlers for reaction chips, "+" buttons, and per-post pickers.
+ * Called after postsEl innerHTML is replaced.
+ */
+function wireReactionHandlers(containerEl, timeline, myPubkey, refreshUI) {
+  const toggleReaction = async (toPubkey, postTimestamp, emoji) => {
+    if (!isValidReactionEmoji(emoji)) return
+    const current = getUserReaction(timeline, myPubkey, toPubkey, postTimestamp)
+    // Append-only feed: we can't remove a prior reaction. If user clicks their
+    // current emoji we treat it as a no-op; clicking a different emoji adds a
+    // second reaction bucket for that pubkey.
+    if (current === emoji) return
+    try {
+      await state.feed.append(createReactionEvent({ toPubkey, postTimestamp, emoji }))
+      await refreshUI()
+    } catch (err) {
+      alert('Error reacting: ' + err.message)
+    }
+  }
+
+  // Chip click: toggle that emoji for the current user
+  containerEl.querySelectorAll('.reaction-chip').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      if (btn.disabled) return
+      const toPubkey = btn.dataset.pubkey
+      const postTimestamp = parseInt(btn.dataset.timestamp)
+      const emoji = btn.dataset.emoji
+      await toggleReaction(toPubkey, postTimestamp, emoji)
+    })
+  })
+
+  // "+" button: reveal picker for this post
+  containerEl.querySelectorAll('.reaction-add-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const pk = btn.dataset.pubkey
+      const ts = btn.dataset.timestamp
+      const picker = containerEl.querySelector(`.reaction-picker[data-pubkey="${pk}"][data-timestamp="${ts}"]`)
+      if (!picker) return
+      // Close all other pickers first
+      containerEl.querySelectorAll('.reaction-picker').forEach(p => {
+        if (p !== picker) p.classList.add('hidden')
+      })
+      const grid = picker.querySelector('.reaction-picker-grid')
+      if (grid && !grid.dataset.populated) {
+        grid.dataset.populated = '1'
+        for (const em of EMOJI_PICKER_LIST) {
+          if (!isValidReactionEmoji(em)) continue
+          const emBtn = document.createElement('button')
+          emBtn.type = 'button'
+          emBtn.className = 'reaction-picker-btn'
+          // textContent handles the rendering safely; DOM avoids HTML parsing
+          emBtn.textContent = em
+          emBtn.addEventListener('click', async (evt) => {
+            evt.stopPropagation()
+            picker.classList.add('hidden')
+            await toggleReaction(pk, parseInt(ts), em)
+          })
+          grid.appendChild(emBtn)
+        }
+      }
+      picker.classList.toggle('hidden')
+    })
+  })
+
+  // Close pickers on outside click. Guard against duplicate binding across
+  // renders — dom.postsEl persists even when its innerHTML is replaced.
+  if (!containerEl.dataset.reactionOutsideBound) {
+    containerEl.dataset.reactionOutsideBound = '1'
+    containerEl.addEventListener('click', (e) => {
+      if (e.target.closest('.reaction-add-btn') || e.target.closest('.reaction-picker')) return
+      containerEl.querySelectorAll('.reaction-picker').forEach(p => p.classList.add('hidden'))
+    })
+  }
+}
+
+/**
  * Render posts to the timeline
  */
 export async function renderPosts(posts, refreshUI) {
@@ -625,7 +734,8 @@ export async function renderPosts(posts, refreshUI) {
 
     // Get interaction counts
     const counts = getInteractionCounts(posts, post.pubkey, post.timestamp)
-    const liked = hasLiked(posts, myPubkey, post.pubkey, post.timestamp)
+    const postReactions = counts.reactions || []
+    const myReaction = getUserReaction(posts, myPubkey, post.pubkey, post.timestamp)
     const reposted = hasReposted(posts, myPubkey, post.pubkey, post.timestamp)
 
     // Get all replies in thread (including nested replies to replies).
@@ -700,7 +810,8 @@ export async function renderPosts(posts, refreshUI) {
           const hasReplyMedia = reply.media && reply.media.length > 0
           const replyCounts = getInteractionCounts(posts, reply.pubkey, reply.timestamp)
           const replyReposted = hasReposted(posts, myPubkey, reply.pubkey, reply.timestamp)
-          const replyLiked = hasLiked(posts, myPubkey, reply.pubkey, reply.timestamp)
+          const replyReactions = replyCounts.reactions || []
+          const replyMyReaction = getUserReaction(posts, myPubkey, reply.pubkey, reply.timestamp)
           const replySupporterManager = getSupporterManager()
           const replyIsSupporter = replySupporterManager?.isListed(reply.pubkey)
           const replySupporterBadge = replyIsSupporter ? '<span class="supporter-badge" title="Supporter"><span class="badge-icon">★</span>Supporter</span>' : ''
@@ -723,10 +834,7 @@ export async function renderPosts(posts, refreshUI) {
               <div class="reply-content">${renderMarkdown(reply.content || '')}</div>
               ${hasReplyMedia ? `<div class="reply-media" data-media-pubkey="${safePubkey}" data-media-ts="${safeTs}"></div>` : ''}
               <div class="reply-actions">
-                ${!isOwnReply ? `<button class="action-btn like-btn reply-like-btn ${replyLiked ? 'liked' : ''}" data-pubkey="${safePubkey}" data-timestamp="${safeTs}" title="Like">
-                  <span class="action-icon">${replyLiked ? '\u2764' : '\u2661'}</span>
-                  <span class="action-count">${replyCounts.likes || ''}</span>
-                </button>` : ''}
+                ${renderReactionCluster(replyReactions, replyMyReaction, reply.pubkey, reply.timestamp, { isOwn: isOwnReply, inReply: true })}
                 <button class="action-btn reply-repost-btn ${replyReposted ? 'reposted' : ''}" data-pubkey="${safePubkey}" data-timestamp="${safeTs}" title="Repost">
                   <span class="action-icon">\u21BB</span>
                   <span class="action-count">${replyCounts.reposts || ''}</span>
@@ -848,10 +956,7 @@ export async function renderPosts(posts, refreshUI) {
           `}
         </div>
         <div class="post-actions">
-          ${!isOwnPost ? `<button class="action-btn like-btn ${liked ? 'liked' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}" title="Like">
-            <span class="action-icon">${liked ? '\u2764' : '\u2661'}</span>
-            <span class="action-count">${counts.likes || ''}</span>
-          </button>` : `<span class="action-placeholder"></span>`}
+          ${renderReactionCluster(postReactions, myReaction, post.pubkey, post.timestamp, { isOwn: isOwnPost })}
           <button class="action-btn repost-btn ${reposted ? 'reposted' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}" title="Repost">
             <span class="action-icon">\u21BB</span>
             <span class="action-count">${counts.reposts || ''}</span>
@@ -1145,7 +1250,6 @@ export async function renderPosts(posts, refreshUI) {
       if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= poll.options.length) return
       if (Date.now() >= Number(poll.expires_at)) return
       if (authorPubkey === myPubkey) return
-      // Confirm once so users understand the public + signed nature.
       const ok = confirm(
         'Votes are public and signed by your feed. Anyone replicating your feed can see your choice.\n\nSubmit your vote?'
       )
@@ -1165,28 +1269,8 @@ export async function renderPosts(posts, refreshUI) {
     })
   })
 
-  // Add like handlers
-  dom.postsEl.querySelectorAll('.like-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation()
-      const toPubkey = btn.dataset.pubkey
-      const postTimestamp = parseInt(btn.dataset.timestamp)
-
-      // Check if already liked
-      if (hasLiked(state.currentTimeline, myPubkey, toPubkey, postTimestamp)) {
-        return // Already liked, can't unlike (append-only)
-      }
-
-      btn.disabled = true
-      try {
-        await state.feed.append(createLikeEvent({ toPubkey, postTimestamp }))
-        await refreshUI()
-      } catch (err) {
-        alert('Error liking: ' + err.message)
-        btn.disabled = false
-      }
-    })
-  })
+  // Add reaction handlers (cluster: chips + "+" picker, replaces likes)
+  wireReactionHandlers(dom.postsEl, state.currentTimeline, myPubkey, refreshUI)
 
   // Add repost handlers - show inline repost form
   dom.postsEl.querySelectorAll('.repost-btn').forEach(btn => {
@@ -1728,7 +1812,7 @@ export function setRefreshUICallback(callback) {
 export async function showThreadInCenter(rootPubkey, rootTimestamp) {
   centerViewActive = true
   const timeline = state.currentTimeline
-  const { buildThread, getInteractionCounts, hasLiked, hasReposted, createReplyEvent, createLikeEvent, createRepostEvent } = await import('../../lib/events.js')
+  const { buildThread, getInteractionCounts, hasReposted, createReplyEvent, createRepostEvent, createReactionEvent, getUserReaction, isValidReactionEmoji } = await import('../../lib/events.js')
 
   const thread = buildThread(timeline, rootPubkey, rootTimestamp)
   if (!thread) {
@@ -1755,7 +1839,8 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
   function renderThreadPost(post, isRoot = false) {
     const displayName = getDisplayName(post.pubkey, state.identity, state.myProfile, state.peerProfiles)
     const counts = getInteractionCounts(timeline, post.pubkey, post.timestamp)
-    const liked = hasLiked(timeline, myPubkey, post.pubkey, post.timestamp)
+    const threadReactions = counts.reactions || []
+    const threadMyReaction = getUserReaction(timeline, myPubkey, post.pubkey, post.timestamp)
     const reposted = hasReposted(timeline, myPubkey, post.pubkey, post.timestamp)
     const isOwnPost = post.pubkey === myPubkey
     const hasMedia = post.media && post.media.length > 0
@@ -1795,10 +1880,7 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
         </div>
         ${threadBodyHtml}
         <div class="thread-post-actions">
-          ${!isOwnPost ? `<button class="action-btn center-like-btn ${liked ? 'liked' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}">
-            <span class="action-icon">${liked ? '\u2764' : '\u2661'}</span>
-            <span class="action-count">${counts.likes || ''}</span>
-          </button>` : '<span class="action-placeholder"></span>'}
+          ${renderReactionCluster(threadReactions, threadMyReaction, post.pubkey, post.timestamp, { isOwn: isOwnPost })}
           <button class="action-btn center-repost-btn ${reposted ? 'reposted' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}">
             <span class="action-icon">\u21BB</span>
             <span class="action-count">${counts.reposts || ''}</span>
@@ -1868,25 +1950,14 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
     })
   })
 
-  // Like handlers
-  dom.postsEl.querySelectorAll('.center-like-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const toPubkey = btn.dataset.pubkey
-      const postTimestamp = parseInt(btn.dataset.timestamp)
-      if (hasLiked(timeline, myPubkey, toPubkey, postTimestamp)) return
-      btn.disabled = true
-      try {
-        await state.feed.append(createLikeEvent({ toPubkey, postTimestamp }))
-        if (refreshUICallback) {
-          await refreshUICallback()
-          await showThreadInCenter(rootPubkey, rootTimestamp)
-        }
-      } catch (err) {
-        alert('Error: ' + err.message)
-        btn.disabled = false
-      }
-    })
-  })
+  // Reaction handlers (cluster-style, replaces likes in thread center view)
+  const threadRefresh = async () => {
+    if (refreshUICallback) {
+      await refreshUICallback()
+      await showThreadInCenter(rootPubkey, rootTimestamp)
+    }
+  }
+  wireReactionHandlers(dom.postsEl, timeline, myPubkey, threadRefresh)
 
   // Repost handlers
   dom.postsEl.querySelectorAll('.center-repost-btn').forEach(btn => {
