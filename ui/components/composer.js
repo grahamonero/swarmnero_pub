@@ -19,6 +19,14 @@ let expPendingFiles = []
 // Sync check interval for composer
 let syncCheckInterval = null
 
+// The draft id currently bound to the composer UI. null when no autosave is
+// active yet (e.g. composer was just opened with empty content).
+let activeDraftId = null
+
+// Debounce timer for autosaving composer state to the DraftStore.
+let draftAutosaveTimer = null
+const DRAFT_AUTOSAVE_DEBOUNCE_MS = 500
+
 /**
  * Show the expanded composer
  */
@@ -41,6 +49,8 @@ export function showExpandedComposer() {
   updateSyncHint()
   syncCheckInterval = setInterval(updateSyncHint, 2000)
 
+  renderSavedDraftsList()
+  renderScheduledList()
   dom.expPostContent.focus()
 }
 
@@ -66,6 +76,11 @@ function clearExpandedComposer() {
   expPendingMedia = []
   expPendingFiles = []
   dom.expPostBtn.disabled = true
+  activeDraftId = null
+  if (draftAutosaveTimer) {
+    clearTimeout(draftAutosaveTimer)
+    draftAutosaveTimer = null
+  }
 
   // Reset paywall fields
   const toggle = document.getElementById('expPaywallToggle')
@@ -87,8 +102,192 @@ function clearExpandedComposer() {
   if (cwLabelInput) cwLabelInput.value = ''
   if (cwCharCount) cwCharCount.textContent = '0'
 
+  if (dom.expScheduleToggle) dom.expScheduleToggle.checked = false
+  if (dom.expScheduleFields) dom.expScheduleFields.classList.add('hidden')
+  if (dom.expScheduleAt) dom.expScheduleAt.value = ''
+
   // Hide metadata warning (shown only when video/file is pending)
   document.getElementById('metadataWarningHint')?.classList.add('hidden')
+}
+
+/**
+ * Autosave the composer state into the active account's DraftStore.
+ * Debounced at the module level; the DraftStore applies a second
+ * 500ms debounce on disk writes, so even a held-down key produces at
+ * most ~2 writes/sec.
+ */
+function scheduleDraftAutosave() {
+  if (!state.drafts) return
+  if (draftAutosaveTimer) clearTimeout(draftAutosaveTimer)
+  draftAutosaveTimer = setTimeout(() => {
+    draftAutosaveTimer = null
+    saveDraftNow({ fromAutosave: true })
+  }, DRAFT_AUTOSAVE_DEBOUNCE_MS)
+}
+
+/**
+ * Persist the current composer state as a draft. Returns the draft record
+ * (or null if drafts aren't initialized). If the composer is empty and
+ * this was triggered by autosave, skips writing.
+ */
+async function saveDraftNow({ fromAutosave = false } = {}) {
+  if (!state.drafts) return null
+  const content = dom.expPostContent.value
+  const hasAttachments = expPendingMedia.length > 0 || expPendingFiles.length > 0
+  const paywallToggle = document.getElementById('expPaywallToggle')
+  const priceInput = document.getElementById('expPaywallPrice')
+  const previewInput = document.getElementById('expPaywallPreview')
+  const paywallEnabled = !!paywallToggle?.checked
+  // Skip autosaves of totally empty composer state to avoid littering drafts.json
+  if (fromAutosave && !content.trim() && !hasAttachments && !paywallEnabled) {
+    return null
+  }
+  // Convert pending File objects to buffer-kind attachments so DraftStore
+  // can copy them into the account dir. Already-stored ones keep their
+  // relPath reference (not applicable yet — we reload into fresh File objects
+  // on draft restore below).
+  const media = []
+  for (const f of expPendingMedia) {
+    try {
+      const bytes = Buffer.from(await f.arrayBuffer())
+      media.push({ kind: 'buffer', bytes, name: f.name, mime: f.type || '' })
+    } catch (err) {
+      console.warn('[Composer] draft attachment read failed:', err.message)
+    }
+  }
+  const files = []
+  for (const f of expPendingFiles) {
+    try {
+      const bytes = Buffer.from(await f.arrayBuffer())
+      files.push({ kind: 'buffer', bytes, name: f.name, mime: f.type || '' })
+    } catch (err) {
+      console.warn('[Composer] draft attachment read failed:', err.message)
+    }
+  }
+  const draft = state.drafts.upsert({
+    id: activeDraftId,
+    content,
+    media,
+    files,
+    paywall: {
+      enabled: paywallEnabled,
+      price: priceInput?.value || '',
+      preview: previewInput?.value || ''
+    }
+  })
+  activeDraftId = draft.id
+  renderSavedDraftsList()
+  return draft
+}
+
+/**
+ * Load a draft into the composer (replaces current composer state).
+ */
+async function loadDraft(draftId) {
+  if (!state.drafts) return
+  const draft = state.drafts.get(draftId)
+  if (!draft) return
+  // Wipe current state first so we don't mix two drafts.
+  activeDraftId = null
+  clearExpandedComposer()
+  activeDraftId = draft.id
+  dom.expPostContent.value = draft.content || ''
+  // Rehydrate attachment File objects from the encrypted store.
+  for (const item of draft.media || []) {
+    try {
+      const bytes = state.drafts.readAttachmentBytes(item.relPath)
+      const file = new File([bytes], item.name || 'attachment', { type: item.mime || '' })
+      expPendingMedia.push(file)
+      addExpMediaPreview(file)
+    } catch (err) {
+      console.warn('[Composer] draft media restore failed:', err.message)
+    }
+  }
+  for (const item of draft.files || []) {
+    try {
+      const bytes = state.drafts.readAttachmentBytes(item.relPath)
+      const file = new File([bytes], item.name || 'file', { type: item.mime || '' })
+      expPendingFiles.push(file)
+      addExpFilePreview(file)
+    } catch (err) {
+      console.warn('[Composer] draft file restore failed:', err.message)
+    }
+  }
+  if (draft.paywall?.enabled) {
+    const toggle = document.getElementById('expPaywallToggle')
+    const fields = document.getElementById('expPaywallFields')
+    const priceInput = document.getElementById('expPaywallPrice')
+    const previewInput = document.getElementById('expPaywallPreview')
+    if (toggle) toggle.checked = true
+    if (fields) fields.classList.remove('hidden')
+    if (priceInput) priceInput.value = draft.paywall.price || ''
+    if (previewInput) previewInput.value = draft.paywall.preview || ''
+  }
+  updateExpCharCount()
+}
+
+/**
+ * Render the list of saved drafts above the footer.
+ */
+function renderSavedDraftsList() {
+  const el = dom.expSavedDraftsList
+  if (!el || !state.drafts) return
+  const list = state.drafts.list().filter(d => d.id !== activeDraftId)
+  if (list.length === 0) {
+    el.classList.add('hidden')
+    el.innerHTML = ''
+    return
+  }
+  el.classList.remove('hidden')
+  const items = list.map(d => {
+    const when = new Date(d.updatedAt || Date.now()).toLocaleString()
+    const previewRaw = (d.content || '(no text)').slice(0, 60)
+    const preview = escapeText(previewRaw)
+    return `<div class="entry" data-id="${d.id}">
+      <span class="entry-text">${preview}</span>
+      <span class="entry-meta">${when}</span>
+      <span class="entry-actions">
+        <button type="button" data-action="load" data-id="${d.id}">Open</button>
+        <button type="button" data-action="delete" data-id="${d.id}">Delete</button>
+      </span>
+    </div>`
+  })
+  el.innerHTML = `<div class="list-title">Saved drafts</div>${items.join('')}`
+}
+
+function renderScheduledList() {
+  const el = dom.expScheduledList
+  if (!el || !state.scheduler) return
+  const list = state.scheduler.list()
+  if (list.length === 0) {
+    el.classList.add('hidden')
+    el.innerHTML = ''
+    return
+  }
+  el.classList.remove('hidden')
+  const items = list.map(entry => {
+    const when = new Date(entry.sendAt).toLocaleString()
+    const previewRaw = (entry.payload.content || '(no text)').slice(0, 60)
+    const preview = escapeText(previewRaw)
+    const lockTag = entry.paywall ? ' 🔒' : ''
+    return `<div class="entry" data-id="${entry.id}">
+      <span class="entry-text">${preview}${lockTag}</span>
+      <span class="entry-meta">${when}</span>
+      <span class="entry-actions">
+        <button type="button" data-sched-action="cancel" data-id="${entry.id}">Cancel</button>
+      </span>
+    </div>`
+  })
+  el.innerHTML = `<div class="list-title">Scheduled posts</div>${items.join('')}`
+}
+
+function escapeText(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 /**
@@ -123,6 +322,7 @@ function updateExpCharCount() {
     expPendingMedia.length === 0 && expPendingFiles.length === 0
   updateTagHint()
   updateMetadataWarning()
+  scheduleDraftAutosave()
 }
 
 /**
@@ -235,6 +435,101 @@ function updateSyncHint() {
     // Re-enable post button based on content (defer to normal check)
     updateExpCharCount()
   }
+}
+
+/**
+ * Dispatch the post button — either schedule the post or publish now
+ * depending on the schedule toggle.
+ */
+async function handlePostBtnClick(refreshUI) {
+  const scheduleOn = !!dom.expScheduleToggle?.checked
+  if (scheduleOn) {
+    await scheduleExpandedPost(refreshUI)
+  } else {
+    await createExpandedPost(refreshUI)
+  }
+}
+
+/**
+ * Queue the current composer state as a scheduled post. Stores the UNSIGNED
+ * payload — signing happens inside the scheduler at fire time.
+ */
+async function scheduleExpandedPost(refreshUI) {
+  if (!state.scheduler) {
+    alert('Scheduler is not ready yet — try again in a moment.')
+    return
+  }
+  const content = dom.expPostContent.value.trim()
+  if (!content && expPendingMedia.length === 0 && expPendingFiles.length === 0) return
+
+  const whenStr = dom.expScheduleAt?.value || ''
+  if (!whenStr) {
+    alert('Pick a send time first.')
+    return
+  }
+  const sendAt = new Date(whenStr).getTime()
+  if (!Number.isFinite(sendAt)) {
+    alert('Invalid send time.')
+    return
+  }
+
+  const paywallToggle = document.getElementById('expPaywallToggle')
+  const isPaywalled = !!paywallToggle?.checked
+  let paywallMeta = null
+  if (isPaywalled) {
+    const priceInput = document.getElementById('expPaywallPrice')
+    const previewInput = document.getElementById('expPaywallPreview')
+    const price = priceInput?.value?.trim()
+    const preview = previewInput?.value?.trim()
+    if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
+      alert('Please enter a valid XMR price for the paywall.')
+      return
+    }
+    if (!preview) {
+      alert('Please enter a public preview text for the paywall.')
+      return
+    }
+    paywallMeta = { price, preview }
+  }
+
+  dom.expPostBtn.disabled = true
+  try {
+    // Upload media + files NOW (same as immediate publish path). The stored
+    // Hyperdrive refs are durable; at fire time we only sign the metadata.
+    const uploadedMedia = []
+    if (state.media && expPendingMedia.length > 0) {
+      for (const file of expPendingMedia) {
+        const result = file.type.startsWith('video/')
+          ? await state.media.storeVideo(file, file.name)
+          : await state.media.storeImage(file, file.name)
+        uploadedMedia.push(result)
+      }
+    }
+    if (state.media && expPendingFiles.length > 0) {
+      for (const file of expPendingFiles) {
+        uploadedMedia.push(await state.media.storeFile(file, file.name))
+      }
+    }
+
+    state.scheduler.schedule({
+      payload: {
+        content,
+        media: uploadedMedia
+      },
+      sendAt,
+      paywall: paywallMeta
+    })
+
+    // Clear composer + drop associated draft once successfully queued.
+    if (activeDraftId && state.drafts) state.drafts.delete(activeDraftId)
+    clearExpandedComposer()
+    hideExpandedComposer()
+    renderScheduledList()
+    await refreshUI()
+  } catch (err) {
+    alert('Could not schedule: ' + err.message)
+  }
+  dom.expPostBtn.disabled = false
 }
 
 /**
@@ -368,6 +663,10 @@ async function createExpandedPost(refreshUI) {
 
     schedulePublicSiteRebuild()
 
+    // Successful publish — drop the associated draft.
+    if (activeDraftId && state.drafts) {
+      state.drafts.delete(activeDraftId)
+    }
     clearExpandedComposer()
     hideExpandedComposer()
     await refreshUI()
@@ -396,13 +695,25 @@ export function initComposer(refreshUI) {
     })
   }
 
-  // Close/cancel buttons
-  dom.closeExpandedComposer.addEventListener('click', () => {
+  // Close/cancel buttons — if autosave is pending, flush it so nothing is lost.
+  dom.closeExpandedComposer.addEventListener('click', async () => {
+    if (draftAutosaveTimer) {
+      clearTimeout(draftAutosaveTimer)
+      draftAutosaveTimer = null
+      await saveDraftNow({ fromAutosave: true })
+    }
+    if (state.drafts) state.drafts.flush()
     hideExpandedComposer()
     clearExpandedComposer()
   })
 
-  dom.cancelExpandedPost.addEventListener('click', () => {
+  dom.cancelExpandedPost.addEventListener('click', async () => {
+    if (draftAutosaveTimer) {
+      clearTimeout(draftAutosaveTimer)
+      draftAutosaveTimer = null
+      await saveDraftNow({ fromAutosave: true })
+    }
+    if (state.drafts) state.drafts.flush()
     hideExpandedComposer()
     clearExpandedComposer()
   })
@@ -585,8 +896,70 @@ export function initComposer(refreshUI) {
     })
   }
 
-  // Post button
-  dom.expPostBtn.addEventListener('click', () => createExpandedPost(refreshUI))
+  // Post button — may schedule or publish depending on toggle
+  dom.expPostBtn.addEventListener('click', () => handlePostBtnClick(refreshUI))
+
+  // Save draft button
+  if (dom.expSaveDraftBtn) {
+    dom.expSaveDraftBtn.addEventListener('click', async () => {
+      try {
+        await saveDraftNow({ fromAutosave: false })
+        if (state.drafts) state.drafts.flush()
+        clearExpandedComposer()
+        hideExpandedComposer()
+      } catch (err) {
+        alert('Could not save draft: ' + err.message)
+      }
+    })
+  }
+
+  // Schedule toggle — show/hide schedule fields
+  if (dom.expScheduleToggle && dom.expScheduleFields) {
+    dom.expScheduleToggle.addEventListener('change', () => {
+      if (dom.expScheduleToggle.checked) {
+        dom.expScheduleFields.classList.remove('hidden')
+        // Default send time: 1 hour from now, formatted for datetime-local
+        if (dom.expScheduleAt && !dom.expScheduleAt.value) {
+          const d = new Date(Date.now() + 60 * 60 * 1000)
+          const pad = (n) => String(n).padStart(2, '0')
+          const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+          dom.expScheduleAt.value = iso
+        }
+        if (dom.expPostBtn) dom.expPostBtn.textContent = 'Schedule'
+      } else {
+        dom.expScheduleFields.classList.add('hidden')
+        if (dom.expPostBtn) dom.expPostBtn.textContent = 'Post'
+      }
+    })
+  }
+
+  // Click-delegation on the drafts + scheduled lists
+  if (dom.expSavedDraftsList) {
+    dom.expSavedDraftsList.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-action]')
+      if (!btn) return
+      const id = btn.getAttribute('data-id')
+      const action = btn.getAttribute('data-action')
+      if (action === 'load') {
+        await loadDraft(id)
+      } else if (action === 'delete') {
+        state.drafts?.delete(id)
+        renderSavedDraftsList()
+      }
+    })
+  }
+  if (dom.expScheduledList) {
+    dom.expScheduledList.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-sched-action]')
+      if (!btn) return
+      const id = btn.getAttribute('data-id')
+      const action = btn.getAttribute('data-sched-action')
+      if (action === 'cancel') {
+        state.scheduler?.cancel(id)
+        renderScheduledList()
+      }
+    })
+  }
 
   // Ctrl+Enter to post, Escape to cancel
   dom.expPostContent.addEventListener('keydown', (e) => {

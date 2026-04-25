@@ -6136,6 +6136,150 @@ button:disabled {
 }
 
 /* ===========================
+   Schedule composer toggle
+   =========================== */
+.schedule-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #30363d;
+}
+
+.schedule-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #c9d1d9;
+}
+
+.schedule-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.schedule-toggle-label {
+  user-select: none;
+}
+
+.schedule-fields {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(22, 27, 34, 0.6);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+}
+
+.schedule-fields.hidden {
+  display: none;
+}
+
+.schedule-field {
+  margin-bottom: 10px;
+}
+
+.schedule-field label {
+  display: block;
+  font-size: 0.8rem;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+.schedule-field input {
+  width: 100%;
+  padding: 8px 10px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #c9d1d9;
+  font-size: 0.9rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.schedule-field input:focus {
+  outline: none;
+  border-color: #ff6600;
+}
+
+.schedule-hint {
+  margin: 8px 0 0 0;
+  font-size: 0.78rem;
+  color: #8b949e;
+  line-height: 1.4;
+}
+
+.saved-drafts-list,
+.scheduled-list {
+  margin-top: 12px;
+  padding: 10px;
+  background: rgba(22, 27, 34, 0.5);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+}
+
+.saved-drafts-list.hidden,
+.scheduled-list.hidden {
+  display: none;
+}
+
+.saved-drafts-list .list-title,
+.scheduled-list .list-title {
+  font-size: 0.8rem;
+  color: #8b949e;
+  margin-bottom: 6px;
+}
+
+.saved-drafts-list .entry,
+.scheduled-list .entry {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 4px;
+  border-bottom: 1px solid #21262d;
+  font-size: 0.85rem;
+  color: #c9d1d9;
+}
+
+.saved-drafts-list .entry:last-child,
+.scheduled-list .entry:last-child {
+  border-bottom: none;
+}
+
+.saved-drafts-list .entry-text,
+.scheduled-list .entry-text {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.saved-drafts-list .entry-meta,
+.scheduled-list .entry-meta {
+  font-size: 0.75rem;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+.saved-drafts-list .entry-actions button,
+.scheduled-list .entry-actions button {
+  margin-left: 6px;
+  font-size: 0.8rem;
+  padding: 3px 8px;
+  background: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.saved-drafts-list .entry-actions button:hover,
+.scheduled-list .entry-actions button:hover {
+  background: #30363d;
+}
+
+/* ===========================
    Paywall locked post in feed
    =========================== */
 .post-content.paywall-locked {

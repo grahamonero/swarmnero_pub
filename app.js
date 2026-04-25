@@ -37,6 +37,8 @@ import * as paywall from './lib/paywall.js'
 import * as paywallStorage from './lib/paywall-storage.js'
 import * as bookmarks from './lib/bookmarks.js'
 import { deriveLocalStorageKey } from './lib/dm-crypto.js'
+import { DraftStore } from './lib/drafts.js'
+import { Scheduler } from './lib/scheduler.js'
 import { loadPeerProfiles } from './lib/peer-profile-cache.js'
 import { rebuildPublicSite, cleanLegacyPublicSiteFromMedia } from './lib/public-site.js'
 import Hyperdrive from 'hyperdrive'
@@ -529,6 +531,10 @@ async function showLoginWalletPrompt() {
 
       // Start background sync
       wallet.startBackgroundSync()
+
+      // Give the scheduler a chance to fire any paywalled posts that were
+      // waiting on wallet unlock.
+      if (state.scheduler) state.scheduler.tick().catch(() => {})
 
       // Close modal
       modal.classList.add('hidden')
@@ -1332,6 +1338,39 @@ async function continueInit(accountManager) {
   state.tipBatcher = tipBatcher
   console.log('TipBatcher initialized')
 
+  // Initialize per-account DraftStore + Scheduler
+  const localKey = deriveLocalStorageKey(identity.secretKey)
+  const activeAccountName2 = accountManager.activeAccount
+  const drafts = new DraftStore({
+    dataDir: DATA_DIR,
+    accountId: activeAccountName2,
+    encryptionKey: localKey
+  })
+  drafts.load()
+  state.drafts = drafts
+  const scheduler = new Scheduler({
+    dataDir: DATA_DIR,
+    accountId: activeAccountName2,
+    identity,
+    feed,
+    encryptionKey: localKey,
+    onPaywallLocked: ({ entry }) => {
+      try {
+        showToast('Scheduled post waiting', `Paywalled post queued for ${new Date(entry.sendAt).toLocaleString()} needs wallet unlock`, 'info')
+      } catch {}
+    },
+    onStale: async ({ entry }) => {
+      const when = new Date(entry.sendAt).toLocaleString()
+      const publish = confirm(`A scheduled post from ${when} is more than 24 hours overdue. Publish it now? (Cancel keeps it queued.)`)
+      return publish ? 'publish' : 'defer'
+    },
+    onFired: () => schedulePublicSiteRebuild()
+  })
+  scheduler.load()
+  state.scheduler = scheduler
+  scheduler.start()
+  console.log('Drafts + Scheduler initialized for account:', activeAccountName2)
+
   // Initialize ReplyNotify protocol
   const replyNotify = new ReplyNotify({
     feed,
@@ -1519,6 +1558,14 @@ async function continueInit(accountManager) {
       try { state.tipBatcher.destroy() } catch (e) { console.warn('TipBatcher destroy:', e) }
     }
 
+    // Stop scheduler + flush drafts before identity is cleared
+    if (state.scheduler) {
+      try { state.scheduler.destroy() } catch (e) { console.warn('Scheduler destroy:', e) }
+    }
+    if (state.drafts) {
+      try { state.drafts.flush(); state.drafts.destroy() } catch (e) { console.warn('Drafts destroy:', e) }
+    }
+
     // Close ReplyNotify
     if (state.replyNotify) {
       try { await state.replyNotify.close() } catch (e) { console.warn('ReplyNotify close:', e) }
@@ -1561,6 +1608,8 @@ async function continueInit(accountManager) {
     state.tagIndex = null
     state.replyNotify = null
     state.tipBatcher = null
+    state.drafts = null
+    state.scheduler = null
     state.storageManager = null
     stopStoragePruneTimer()
     state.identity = null
@@ -1622,6 +1671,16 @@ async function continueInit(accountManager) {
       try { state.tipBatcher.destroy() } catch (e) { console.warn('TipBatcher destroy:', e) }
     }
 
+    // Stop scheduler + flush drafts for the outgoing account BEFORE identity
+    // is cleared and a new one is loaded. Prevents the scheduler from firing
+    // entries against the wrong identity mid-switch.
+    if (state.scheduler) {
+      try { state.scheduler.destroy() } catch (e) { console.warn('Scheduler destroy:', e) }
+    }
+    if (state.drafts) {
+      try { state.drafts.flush(); state.drafts.destroy() } catch (e) { console.warn('Drafts destroy:', e) }
+    }
+
     // Close ReplyNotify before closing feed
     if (state.replyNotify) {
       try { await state.replyNotify.close() } catch (e) { console.warn('ReplyNotify close:', e) }
@@ -1662,6 +1721,8 @@ async function continueInit(accountManager) {
     state.tagIndex = null
     state.replyNotify = null
     state.tipBatcher = null
+    state.drafts = null
+    state.scheduler = null
     state.storageManager = null
     stopStoragePruneTimer()
 
@@ -1772,6 +1833,42 @@ async function continueInit(accountManager) {
     state.storageManager = newStorageManager
     startStoragePruneTimer()
 
+    // Rebind paywall storage encryption to the new account's secret so
+    // paywall-keys.json writes go through the right key.
+    paywallStorage.setEncryptionKey(deriveLocalStorageKey(newIdentity.secretKey))
+
+    // Reinitialize per-account DraftStore + Scheduler for the new account.
+    const newLocalKey = deriveLocalStorageKey(newIdentity.secretKey)
+    const newAccountId = state.accountManager.activeAccount
+    const newDrafts = new DraftStore({
+      dataDir: DATA_DIR,
+      accountId: newAccountId,
+      encryptionKey: newLocalKey
+    })
+    newDrafts.load()
+    state.drafts = newDrafts
+    const newScheduler = new Scheduler({
+      dataDir: DATA_DIR,
+      accountId: newAccountId,
+      identity: newIdentity,
+      feed: newFeed,
+      encryptionKey: newLocalKey,
+      onPaywallLocked: ({ entry }) => {
+        try {
+          showToast('Scheduled post waiting', `Paywalled post queued for ${new Date(entry.sendAt).toLocaleString()} needs wallet unlock`, 'info')
+        } catch {}
+      },
+      onStale: async ({ entry }) => {
+        const when = new Date(entry.sendAt).toLocaleString()
+        const publish = confirm(`A scheduled post from ${when} is more than 24 hours overdue. Publish it now? (Cancel keeps it queued.)`)
+        return publish ? 'publish' : 'defer'
+      },
+      onFired: () => schedulePublicSiteRebuild()
+    })
+    newScheduler.load()
+    state.scheduler = newScheduler
+    newScheduler.start()
+
     // Update unread badge
     await updateUnreadBadge()
 
@@ -1851,6 +1948,8 @@ async function continueInit(accountManager) {
 // Handle Pear teardown
 Pear.teardown(async () => {
   console.log('Shutting down...')
+  if (state.scheduler) { try { state.scheduler.destroy() } catch {} }
+  if (state.drafts) { try { state.drafts.flush(); state.drafts.destroy() } catch {} }
   if (state.discovery) state.discovery.disable()
   if (state.dm) await state.dm.close()
   if (state.media) await state.media.close()
