@@ -6532,6 +6532,8 @@ button:disabled {
 .saved-drafts-list .entry-actions button:hover,
 .scheduled-list .entry-actions button:hover {
   background: #30363d;
+}
+
 .poll-option-remove {
   padding: 0 10px;
 }
@@ -7452,6 +7454,8 @@ body.duplicate-instance-active .paywall-unlock-btn {
   font-size: 0.8rem;
   color: #d29922;
   margin: 0;
+}
+
 /* Multi-image carousel grid + lightbox */
 .carousel-grid {
   display: grid;
@@ -7569,6 +7573,8 @@ body.duplicate-instance-active .paywall-unlock-btn {
   background: rgba(0, 0, 0, 0.4);
   padding: 4px 10px;
   border-radius: 999px;
+}
+
 /* ===========================
    Content warning (CW)
    =========================== */
