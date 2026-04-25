@@ -6967,13 +6967,10 @@ body.duplicate-instance-active .paywall-unlock-btn {
 /* Public hyper-site section in profile settings */
 .profile-public-site-section {
   margin-top: 20px;
-  padding: 16px;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  background: #161b22;
+  padding-top: 20px;
+  border-top: 1px solid #30363d;
   max-width: 100%;
   box-sizing: border-box;
-  overflow: hidden;
 }
 .profile-section-heading {
   margin: 0 0 8px;
