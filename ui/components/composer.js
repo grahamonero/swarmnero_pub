@@ -555,15 +555,16 @@ async function scheduleExpandedPost(refreshUI) {
       alert('Polls cannot include media attachments. Remove attachments or disable the poll toggle.')
       return
     }
-    if (content) {
-      alert('Polls do not include post text. Either clear the post text and put your question in the poll question field, or disable the poll toggle.')
-      return
-    }
     const questionInput = document.getElementById('expPollQuestion')
     const durationSelect = document.getElementById('expPollDuration')
     const rawQuestion = (questionInput?.value || '').trim()
-    if (!rawQuestion) {
-      alert('Please enter a poll question.')
+    if (rawQuestion && content) {
+      alert("Polls do not carry post text. Either clear the post text above, or clear the poll question field — not both.")
+      return
+    }
+    const finalQuestion = rawQuestion || content
+    if (!finalQuestion) {
+      alert('Please enter a poll question (in the question field, or in the post text above).')
       return
     }
     const optionInputs = Array.from(document.querySelectorAll('.poll-option-input'))
@@ -590,7 +591,7 @@ async function scheduleExpandedPost(refreshUI) {
       state.scheduler.schedule({
         payload: {
           kind: 'poll',
-          poll: { question: rawQuestion, options, durationMs }
+          poll: { question: finalQuestion, options, durationMs }
         },
         sendAt
       })
@@ -704,15 +705,16 @@ async function createExpandedPost(refreshUI) {
       alert('Polls cannot include media attachments. Remove attachments or disable the poll toggle.')
       return
     }
-    if (content) {
-      alert('Polls do not include post text. Either clear the post text and put your question in the poll question field, or disable the poll toggle.')
-      return
-    }
     const questionInput = document.getElementById('expPollQuestion')
     const durationSelect = document.getElementById('expPollDuration')
     const rawQuestion = (questionInput?.value || '').trim()
-    if (!rawQuestion) {
-      alert('Please enter a poll question.')
+    if (rawQuestion && content) {
+      alert("Polls do not carry post text. Either clear the post text above, or clear the poll question field — not both.")
+      return
+    }
+    const finalQuestion = rawQuestion || content
+    if (!finalQuestion) {
+      alert('Please enter a poll question (in the question field, or in the post text above).')
       return
     }
     const optionInputs = Array.from(document.querySelectorAll('.poll-option-input'))
@@ -739,7 +741,7 @@ async function createExpandedPost(refreshUI) {
     try {
       const expiresAt = Date.now() + durationMs
       await state.feed.append(createPollEvent({
-        question: rawQuestion,
+        question: finalQuestion,
         options,
         expiresAt
       }))
