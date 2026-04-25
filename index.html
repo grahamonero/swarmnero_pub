@@ -53,7 +53,7 @@
     <header class="topnav">
       <div class="topnav-brand">
         <img src="./logo.png" alt="Swarmnero" class="logo-img">
-        <span class="version" id="versionBadge">v0.9.1</span>
+        <span class="version" id="versionBadge">v0.9.2</span>
       </div>
       <nav class="topnav-tabs">
         <button id="feedNavBtn" class="nav-btn topnav-tab"><span class="nav-icon">🏠</span><span class="topnav-tab-label">Home</span></button>
@@ -946,6 +946,21 @@
       <div class="modal-actions">
         <button id="loginWalletSkip" class="secondary-btn">Skip</button>
         <button id="loginWalletUnlock">Unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Public hyper-site URL modal (shown via View button in profile) -->
+  <div class="modal hidden" id="publicSiteUrlModal">
+    <div class="modal-content swarm-id-modal-content">
+      <h3>Public hyper-site address</h3>
+      <p class="swarm-id-modal-hint">Open this URL in a hyper-aware browser (PearBrowser, Agregore) to view your published profile and posts. Safe to share publicly.</p>
+      <div class="swarm-id-modal-value-wrapper">
+        <code class="swarm-id-modal-value" id="publicSiteUrlModalValue"></code>
+      </div>
+      <div class="modal-actions">
+        <button id="publicSiteUrlModalClose" class="secondary-btn">Close</button>
+        <button id="publicSiteUrlModalCopy">Copy</button>
       </div>
     </div>
   </div>

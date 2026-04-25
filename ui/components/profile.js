@@ -778,17 +778,15 @@ export function renderProfilePublicSiteSection() {
   section.innerHTML = `
     <h4 class="profile-section-heading">Public hyper-site</h4>
     <p class="profile-section-help">
-      Your profile + last 100 public posts are published as a static site in your Hyperdrive.
-      Anyone with a hyper-aware browser (PearBrowser, Agregore) can read it at the URL below —
-      shareable outside Swarmnero. Paywalled post bodies and replies are not included.
+      Your profile + last 100 public posts are published as a static site in your Hyperdrive. Anyone with a hyper-aware browser (PearBrowser, Agregore) can read it at your hyper-site address — shareable outside Swarmnero. Paywalled post bodies and replies are not included.
     </p>
     <label class="profile-public-site-toggle">
       <input type="checkbox" id="publicSiteToggle" ${enabled ? 'checked' : ''}>
       <span>Publish public hyper-site</span>
     </label>
-    <div class="profile-public-site-url ${enabled ? '' : 'disabled'}">
-      <code id="publicSiteUrl">${escapeHtml(hyperUrl)}</code>
-      <button type="button" id="copyPublicSiteUrlBtn" class="btn-small" ${enabled ? '' : 'disabled'}>Copy</button>
+    <div class="profile-public-site-actions ${enabled ? '' : 'disabled'}">
+      <button type="button" id="copyPublicSiteUrlBtn" class="btn-small" ${enabled ? '' : 'disabled'}>Copy hyper-site address</button>
+      <button type="button" id="viewPublicSiteUrlBtn" class="btn-small secondary-btn" ${enabled ? '' : 'disabled'}>View</button>
     </div>
   `
 
@@ -806,11 +804,46 @@ export function renderProfilePublicSiteSection() {
     copyBtn.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(hyperUrl)
+        const original = copyBtn.textContent
         copyBtn.textContent = 'Copied!'
-        setTimeout(() => { copyBtn.textContent = 'Copy' }, 2000)
+        setTimeout(() => { copyBtn.textContent = original }, 2000)
       } catch (err) {
         alert('Copy failed: ' + err.message)
       }
     })
   }
+
+  const viewBtn = document.getElementById('viewPublicSiteUrlBtn')
+  if (viewBtn) {
+    viewBtn.addEventListener('click', () => showPublicSiteUrlModal(hyperUrl))
+  }
+}
+
+function showPublicSiteUrlModal(hyperUrl) {
+  const modal = document.getElementById('publicSiteUrlModal')
+  const valueEl = document.getElementById('publicSiteUrlModalValue')
+  const closeBtn = document.getElementById('publicSiteUrlModalClose')
+  const copyBtn = document.getElementById('publicSiteUrlModalCopy')
+  if (!modal || !valueEl || !closeBtn || !copyBtn) return
+
+  valueEl.textContent = hyperUrl
+  modal.classList.remove('hidden')
+
+  const close = () => {
+    modal.classList.add('hidden')
+    closeBtn.removeEventListener('click', close)
+    copyBtn.removeEventListener('click', onCopy)
+  }
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(hyperUrl)
+      const original = copyBtn.textContent
+      copyBtn.textContent = 'Copied!'
+      setTimeout(() => { copyBtn.textContent = original }, 2000)
+    } catch (err) {
+      alert('Copy failed: ' + err.message)
+    }
+  }
+  closeBtn.addEventListener('click', close)
+  copyBtn.addEventListener('click', onCopy)
 }

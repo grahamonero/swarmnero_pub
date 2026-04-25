@@ -6989,36 +6989,17 @@ body.duplicate-instance-active .paywall-unlock-btn {
 }
 .profile-public-site-toggle {
   display: flex; align-items: center; gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   font-size: 0.9rem;
   cursor: pointer;
 }
 .profile-public-site-toggle input { cursor: pointer; }
-.profile-public-site-url {
-  display: flex; gap: 8px; align-items: flex-start;
-  padding: 8px;
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 4px;
-  max-width: 100%;
-  box-sizing: border-box;
-  overflow: hidden;
+.profile-public-site-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.profile-public-site-url code {
-  flex: 1 1 0;
-  min-width: 0;
-  font-size: 0.75rem;
-  color: #79c0ff;
-  word-break: break-all;
-  overflow-wrap: anywhere;
-  white-space: normal;
-  background: transparent;
-  padding: 0;
-}
-.profile-public-site-url button {
-  flex-shrink: 0;
-}
-.profile-public-site-url.disabled { opacity: 0.5; }
+.profile-public-site-actions.disabled { opacity: 0.5; }
 
 /* Timeline filter toggle bar */
 .timeline-toggle-bar {
