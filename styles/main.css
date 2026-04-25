@@ -4335,7 +4335,7 @@ button:disabled {
 .profile-sync-section {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid #30363d;
+  border-top: 2px solid #30363d;
 }
 
 /* Subscription renewal banner */
@@ -6968,9 +6968,7 @@ body.duplicate-instance-active .paywall-unlock-btn {
 .profile-public-site-section {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid #30363d;
-  max-width: 100%;
-  box-sizing: border-box;
+  border-top: 2px solid #30363d;
 }
 .profile-section-heading {
   margin: 0 0 8px;
