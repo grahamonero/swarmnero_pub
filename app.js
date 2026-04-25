@@ -689,12 +689,39 @@ function showUpdateReadyBanner() {
   const banner = document.createElement('div')
   banner.id = 'updateReadyBanner'
   banner.className = 'update-ready-banner'
+  // Inline critical styles so the banner renders correctly even if the
+  // stylesheet didn't load this rule yet, or a global button rule beats
+  // class specificity for the action buttons. Belt-and-braces alongside
+  // styles/main.css `.update-ready-banner` rules.
+  banner.style.cssText = `
+    position: fixed !important;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 720px;
+    width: calc(100% - 48px);
+    background: #0c2d48;
+    border: 1px solid #1f6feb;
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: #e6edf3;
+    font-size: 13px;
+    line-height: 1.5;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+    z-index: 9999;
+  `
   banner.innerHTML = `
-    <div class="urb-inner">
-      <strong>↻ Update ready</strong>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <strong style="color:#79c0ff; white-space:nowrap;">↻ Update ready</strong>
       <span>A new version of Swarmnero is downloaded. Restart to apply.</span>
-      <button class="urb-restart">Restart now</button>
-      <button class="urb-close" aria-label="Dismiss later">×</button>
+      <button class="urb-restart" style="
+        background:#1f6feb; border:0; color:#fff; padding:6px 12px;
+        border-radius:6px; cursor:pointer; font-weight:500;
+        margin-left:auto; box-shadow:none;">Restart now</button>
+      <button class="urb-close" aria-label="Dismiss later" style="
+        background:transparent; border:0; color:#8b949e; font-size:20px;
+        line-height:1; cursor:pointer; padding:0 4px; flex-shrink:0;
+        box-shadow:none;">×</button>
     </div>
   `
   banner.querySelector('.urb-restart').addEventListener('click', () => {
