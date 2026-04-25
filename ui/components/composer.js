@@ -5,7 +5,7 @@
 import { state, dom } from '../state.js'
 import { wrapSelection, insertAtCursor } from '../utils/dom.js'
 import { initEmojiPicker, toggleEmojiPicker } from '../utils/emoji.js'
-import { createPostEvent, MAX_MEDIA_PER_POST, MAX_CW_LENGTH } from '../../lib/events.js'
+import { createPostEvent, createPollEvent, MAX_MEDIA_PER_POST, MAX_CW_LENGTH, POLL_MAX_OPTIONS, POLL_MAX_OPTION_LEN } from '../../lib/events.js'
 import * as wallet from '../../lib/wallet.js'
 import { extractHashtags } from '../../lib/tag-extractor.js'
 import { createPaywalledPost, persistContentKey, cacheUnlockedContent } from '../../lib/paywall.js'
@@ -105,6 +105,17 @@ function clearExpandedComposer() {
   if (dom.expScheduleToggle) dom.expScheduleToggle.checked = false
   if (dom.expScheduleFields) dom.expScheduleFields.classList.add('hidden')
   if (dom.expScheduleAt) dom.expScheduleAt.value = ''
+
+  // Reset poll fields
+  const pollToggle = document.getElementById('expPollToggle')
+  const pollFields = document.getElementById('expPollFields')
+  const pollQuestion = document.getElementById('expPollQuestion')
+  const pollDuration = document.getElementById('expPollDuration')
+  if (pollToggle) pollToggle.checked = false
+  if (pollFields) pollFields.classList.add('hidden')
+  if (pollQuestion) pollQuestion.value = ''
+  if (pollDuration) pollDuration.value = '86400000'
+  resetPollOptions()
 
   // Hide metadata warning (shown only when video/file is pending)
   document.getElementById('metadataWarningHint')?.classList.add('hidden')
@@ -288,6 +299,57 @@ function escapeText(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+}
+
+/**
+ * Rebuild the poll options list to two empty inputs (the minimum valid poll).
+ */
+function resetPollOptions() {
+  const list = document.getElementById('expPollOptionsList')
+  if (!list) return
+  list.innerHTML = ''
+  addPollOptionRow()
+  addPollOptionRow()
+}
+
+/**
+ * Append one option input row. Enforces the compose-time length cap. The cap
+ * is also re-checked at send time and again on ingest in lib/events.js.
+ */
+function addPollOptionRow(initial = '') {
+  const list = document.getElementById('expPollOptionsList')
+  if (!list) return
+  const rows = list.querySelectorAll('.poll-option-row')
+  if (rows.length >= POLL_MAX_OPTIONS) return
+
+  const row = document.createElement('div')
+  row.className = 'poll-option-row'
+  row.style.display = 'flex'
+  row.style.gap = '6px'
+  row.style.marginBottom = '6px'
+
+  const input = document.createElement('input')
+  input.type = 'text'
+  input.className = 'poll-option-input'
+  input.maxLength = POLL_MAX_OPTION_LEN
+  input.placeholder = `Option ${rows.length + 1}`
+  input.value = initial
+  input.style.flex = '1'
+
+  const remove = document.createElement('button')
+  remove.type = 'button'
+  remove.className = 'btn-secondary poll-option-remove'
+  remove.textContent = '×'
+  remove.title = 'Remove option'
+  remove.addEventListener('click', () => {
+    const remaining = list.querySelectorAll('.poll-option-row')
+    if (remaining.length <= 2) return
+    row.remove()
+  })
+
+  row.appendChild(input)
+  row.appendChild(remove)
+  list.appendChild(row)
 }
 
 /**
@@ -537,7 +599,60 @@ async function scheduleExpandedPost(refreshUI) {
  */
 async function createExpandedPost(refreshUI) {
   const content = dom.expPostContent.value.trim()
-  if (!content && expPendingMedia.length === 0 && expPendingFiles.length === 0) return
+
+  // Check poll toggle first — poll posts have their own flow and do not carry
+  // media / paywall fields (the poll event is self-contained).
+  const pollToggle = document.getElementById('expPollToggle')
+  const isPoll = !!pollToggle?.checked
+
+  if (!isPoll && !content && expPendingMedia.length === 0 && expPendingFiles.length === 0) return
+
+  if (isPoll) {
+    if (expPendingMedia.length > 0 || expPendingFiles.length > 0) {
+      alert('Polls cannot include media attachments. Remove attachments or disable the poll toggle.')
+      return
+    }
+    const questionInput = document.getElementById('expPollQuestion')
+    const durationSelect = document.getElementById('expPollDuration')
+    const rawQuestion = questionInput?.value?.trim() || content
+    const optionInputs = Array.from(document.querySelectorAll('.poll-option-input'))
+    const options = optionInputs.map(i => i.value.trim()).filter(v => v.length > 0)
+    const durationMs = parseInt(durationSelect?.value || '86400000', 10)
+    if (!Number.isFinite(durationMs) || durationMs < 60 * 1000) {
+      alert('Please choose a valid poll duration.')
+      return
+    }
+    if (options.length < 2) {
+      alert('A poll needs at least 2 non-empty options.')
+      return
+    }
+    if (options.length > POLL_MAX_OPTIONS) {
+      alert(`Polls are capped at ${POLL_MAX_OPTIONS} options.`)
+      return
+    }
+    if (options.some(o => o.length > POLL_MAX_OPTION_LEN)) {
+      alert(`Each poll option is limited to ${POLL_MAX_OPTION_LEN} characters.`)
+      return
+    }
+
+    dom.expPostBtn.disabled = true
+    try {
+      const expiresAt = Date.now() + durationMs
+      await state.feed.append(createPollEvent({
+        question: rawQuestion,
+        options,
+        expiresAt
+      }))
+      schedulePublicSiteRebuild()
+      clearExpandedComposer()
+      hideExpandedComposer()
+      await refreshUI()
+    } catch (err) {
+      alert('Error creating poll: ' + err.message)
+    }
+    dom.expPostBtn.disabled = false
+    return
+  }
 
   // Check paywall toggle
   const paywallToggle = document.getElementById('expPaywallToggle')
@@ -959,6 +1074,37 @@ export function initComposer(refreshUI) {
         renderScheduledList()
       }
     })
+  }
+
+  // Poll toggle - mutually exclusive with paywall mode (a poll is its own top-level event)
+  const pollToggle = document.getElementById('expPollToggle')
+  const pollFields = document.getElementById('expPollFields')
+  const pollAddBtn = document.getElementById('expPollAddOptionBtn')
+  if (pollToggle && pollFields) {
+    pollToggle.addEventListener('change', () => {
+      if (pollToggle.checked) {
+        if (paywallToggle?.checked) {
+          paywallToggle.checked = false
+          paywallFields?.classList.add('hidden')
+        }
+        pollFields.classList.remove('hidden')
+        const list = document.getElementById('expPollOptionsList')
+        if (list && list.children.length === 0) resetPollOptions()
+      } else {
+        pollFields.classList.add('hidden')
+      }
+    })
+  }
+  if (paywallToggle && pollToggle) {
+    paywallToggle.addEventListener('change', () => {
+      if (paywallToggle.checked && pollToggle.checked) {
+        pollToggle.checked = false
+        pollFields?.classList.add('hidden')
+      }
+    })
+  }
+  if (pollAddBtn) {
+    pollAddBtn.addEventListener('click', () => addPollOptionRow())
   }
 
   // Ctrl+Enter to post, Escape to cancel

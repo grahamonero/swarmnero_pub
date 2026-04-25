@@ -12,11 +12,14 @@ import {
   createRepostEvent,
   createReplyEvent,
   createReplyMetadataEvent,
+  createPollVoteEvent,
   getInteractionCounts,
   hasLiked,
   hasReposted,
   getReplies,
-  getAllRepliesFlat
+  getAllRepliesFlat,
+  tallyPollVotes,
+  validatePollEvent
 } from '../../lib/events.js'
 import { showTipModal } from './tip.js'
 import { getSupporterManager } from '../../lib/supporter-manager.js'
@@ -521,17 +524,30 @@ export async function renderPosts(posts, refreshUI) {
     p.type === 'repost' && !deletedKeys.has(`${p.pubkey}:${p.timestamp}`)
   )
 
+  // Get all poll events (exclude deleted ones, validate structure)
+  let pollEvents = posts.filter(p =>
+    p.type === 'poll' &&
+    !deletedKeys.has(`${p.pubkey}:${p.timestamp}`) &&
+    validatePollEvent(p)
+  )
+
   if (filterMyOnly) {
     postEvents = postEvents.filter(p => p.pubkey === myPubkey)
     repostEvents = repostEvents.filter(p => p.pubkey === myPubkey)
+    pollEvents = pollEvents.filter(p => p.pubkey === myPubkey)
   }
 
-  // Build timeline items: original posts + reposts (sorted by time)
+  // Build timeline items: original posts + reposts + polls (sorted by time)
   const timelineItems = []
 
   // Add original posts
   for (const post of postEvents) {
     timelineItems.push({ type: 'post', post, timestamp: post.timestamp })
+  }
+
+  // Add polls
+  for (const poll of pollEvents) {
+    timelineItems.push({ type: 'poll', poll, timestamp: poll.timestamp })
   }
 
   // Add reposts (find original post and wrap it)
@@ -890,6 +906,86 @@ export async function renderPosts(posts, refreshUI) {
   `
   }
 
+  // Render a poll card. Tally is computed from the current timeline via
+  // tallyPollVotes, which runs verifyEventSignature per vote, dedupes by voter
+  // pubkey (latest wins, tiebreak by Hypercore _seq), and drops votes past
+  // poll.expires_at. Option labels are escaped here and in the result bars.
+  function renderPollCard(poll) {
+    const displayName = getDisplayName(poll.pubkey, state.identity, state.myProfile, state.peerProfiles)
+    const isOwnPoll = poll.pubkey === myPubkey
+    const safePk = escapeHtml(poll.pubkey || '')
+    const safeTs = escapeHtml(String(poll.timestamp || ''))
+    const expiresAt = Number(poll.expires_at)
+    const nowMs = Date.now()
+    const ended = !Number.isFinite(expiresAt) || nowMs >= expiresAt
+
+    const supporterManager = getSupporterManager()
+    const isSupporter = supporterManager?.isListed(poll.pubkey)
+    const supporterBadge = isSupporter ? '<span class="supporter-badge" title="Supporter"><span class="badge-icon">&#9733;</span>Supporter</span>' : ''
+
+    const { counts, total, voters } = tallyPollVotes(poll, posts, nowMs)
+    const myVoteIndex = myPubkey ? voters.get(myPubkey.toLowerCase()) : undefined
+    const hasVoted = typeof myVoteIndex === 'number'
+
+    // Render options. Showing the vote button is disabled once the poll has
+    // ended, after the viewer has voted, or for the author's own poll.
+    const canVote = !ended && !hasVoted && !isOwnPoll
+    const optionsHtml = poll.options.map((label, idx) => {
+      const votes = counts[idx] || 0
+      const pct = total > 0 ? Math.round((votes / total) * 100) : 0
+      const selected = hasVoted && myVoteIndex === idx ? ' poll-option-selected' : ''
+      const barHtml = (ended || hasVoted)
+        ? `<div class="poll-option-bar" style="width:${pct}%"></div>`
+        : ''
+      const voteBtnHtml = canVote
+        ? `<button class="poll-vote-btn" data-pubkey="${safePk}" data-timestamp="${safeTs}" data-option="${idx}">Vote</button>`
+        : ''
+      const countHtml = (ended || hasVoted)
+        ? `<span class="poll-option-count">${votes} &middot; ${pct}%</span>`
+        : ''
+      return `
+        <div class="poll-option${selected}">
+          ${barHtml}
+          <div class="poll-option-body">
+            <span class="poll-option-label">${escapeHtml(label)}</span>
+            ${countHtml}
+            ${voteBtnHtml}
+          </div>
+        </div>
+      `
+    }).join('')
+
+    const timeLeft = ended
+      ? 'Poll ended'
+      : `Ends ${formatTime(expiresAt)}`
+    const warningHtml = canVote
+      ? '<div class="poll-vote-warning">&#9888; Votes are public and signed &mdash; anyone can see your choice.</div>'
+      : ''
+    const question = poll.question || ''
+
+    return `
+      <div class="post-wrapper">
+        <div class="post poll-card" data-pubkey="${safePk}" data-timestamp="${safeTs}">
+          <div class="post-header">
+            ${getAvatarHtml(poll.pubkey, 'post')}
+            <span class="post-author" data-pubkey="${safePk}">${escapeHtml(displayName)}</span>${getOnlineDotHtml(poll.pubkey)}${supporterBadge}
+            <span class="post-time">${formatTime(poll.timestamp)}</span>
+            ${isOwnPoll ? `<button class="delete-btn" data-timestamp="${safeTs}" title="Delete poll">&#128465;</button>` : ''}
+          </div>
+          <div class="post-body">
+            <div class="poll-question">${escapeHtml(question)}</div>
+            <div class="poll-options">${optionsHtml}</div>
+            <div class="poll-meta">
+              <span class="poll-total">${total} vote${total === 1 ? '' : 's'}</span>
+              <span class="poll-time-left">${escapeHtml(timeLeft)}</span>
+            </div>
+            ${warningHtml}
+          </div>
+        </div>
+      </div>
+    `
+  }
+
   // Render a top-level "my reply" card (only appears when "My posts" is toggled on)
   function renderMyReplyCard(reply) {
     const hasReplyMedia = reply.media && reply.media.length > 0
@@ -927,6 +1023,8 @@ export async function renderPosts(posts, refreshUI) {
       })
     } else if (item.type === 'myreply') {
       return renderMyReplyCard(item.reply)
+    } else if (item.type === 'poll') {
+      return renderPollCard(item.poll)
     } else {
       return renderPostWithReplies(item.post, idx)
     }
@@ -1026,6 +1124,43 @@ export async function renderPosts(posts, refreshUI) {
       )
       if (post) {
         showPaywallUnlockModal(post)
+      }
+    })
+  })
+
+  // Poll vote handlers. Votes are signed by feed.append at send time so the
+  // timestamp used for the expires_at check is the feed-signed one, not
+  // user-supplied. Aggregator enforces dedupe + bounds + signature checks at
+  // render.
+  dom.postsEl.querySelectorAll('.poll-vote-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const authorPubkey = btn.dataset.pubkey
+      const pollTimestamp = parseInt(btn.dataset.timestamp, 10)
+      const optionIndex = parseInt(btn.dataset.option, 10)
+      const poll = state.currentTimeline.find(p =>
+        p.type === 'poll' && p.pubkey === authorPubkey && p.timestamp === pollTimestamp
+      )
+      if (!poll || !validatePollEvent(poll)) return
+      if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= poll.options.length) return
+      if (Date.now() >= Number(poll.expires_at)) return
+      if (authorPubkey === myPubkey) return
+      // Confirm once so users understand the public + signed nature.
+      const ok = confirm(
+        'Votes are public and signed by your feed. Anyone replicating your feed can see your choice.\n\nSubmit your vote?'
+      )
+      if (!ok) return
+      btn.disabled = true
+      try {
+        await state.feed.append(createPollVoteEvent({
+          pollAuthorPubkey: authorPubkey,
+          pollTimestamp,
+          optionIndex
+        }))
+        await refreshUI()
+      } catch (err) {
+        alert('Error submitting vote: ' + err.message)
+        btn.disabled = false
       }
     })
   })
