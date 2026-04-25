@@ -253,7 +253,11 @@ export const dom = {
 
   // Storage
   storageSection: null,
-  storageContent: null
+  storageContent: null,
+
+  // Bookmarks
+  bookmarksSection: null,
+  bookmarksContent: null
 }
 
 /**
@@ -434,6 +438,10 @@ export function initDom() {
   // Storage
   dom.storageSection = document.getElementById('storage-section')
   dom.storageContent = document.getElementById('storageContent')
+
+  // Bookmarks
+  dom.bookmarksSection = document.getElementById('bookmarks-section')
+  dom.bookmarksContent = document.getElementById('bookmarksContent')
 }
 
 /**

@@ -517,6 +517,7 @@ function hideAllPanelSections() {
   dom.trendingSection?.classList.add('hidden')
   dom.settingsSection?.classList.add('hidden')
   dom.storageSection?.classList.add('hidden')
+  dom.bookmarksSection?.classList.add('hidden')
 }
 
 /**
@@ -670,6 +671,12 @@ export async function showPanelView(type, data = {}) {
       import('./storage.js').then(m => m.renderStorage())
       break
 
+    case 'bookmarks':
+      dom.bookmarksSection?.classList.remove('hidden')
+      document.querySelector('.nav-btn[data-view="bookmarks"]')?.classList.add('active')
+      import('./bookmarks.js').then(m => m.renderBookmarks())
+      break
+
     default:
       // Default to Swarm ID - restore posts view
       dom.postsEl?.classList.remove('hidden')
@@ -748,6 +755,7 @@ export function showSection(sectionName) {
     'trending': 'trending',
     'settings': 'settings',
     'storage': 'storage',
+    'bookmarks': 'bookmarks',
     'user-profile': null, // This is handled by showProfile/showThread directly
     'thread': null        // This is handled by showThread directly
   }

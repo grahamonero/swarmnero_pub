@@ -24,6 +24,7 @@ import { showFollowingModal, showFollowersModal, getFollowingForPubkey, getFollo
 import { isPaywalledPost } from '../../lib/events.js'
 import { getUnlockedContent, isPostUnlocked } from '../../lib/paywall.js'
 import { showPaywallUnlockModal } from './paywall-modal.js'
+import { isBookmarked, addBookmark, removeBookmark } from '../../lib/bookmarks.js'
 import { isAuthorOnline } from '../utils/format.js'
 import { schedulePublicSiteRebuild } from '../../app.js'
 import { MAX_PEER_FILE_BYTES } from '../../lib/media.js'
@@ -578,6 +579,9 @@ export async function renderPosts(posts, refreshUI) {
             <span class="action-icon">\u{1F4AC}</span>
             <span class="action-count">${counts.replies || ''}</span>
           </button>
+          <button class="action-btn bookmark-btn ${isBookmarked(post.pubkey, post.timestamp) ? 'bookmarked' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}" title="${isBookmarked(post.pubkey, post.timestamp) ? 'Remove bookmark' : 'Bookmark'}">
+            <span class="action-icon">${isBookmarked(post.pubkey, post.timestamp) ? '\u{1F516}' : '\u{1F4D1}'}</span>
+          </button>
           <button class="action-btn tip-btn" data-pubkey="${safePk}" data-timestamp="${safeTs}" data-is-own="${isOwnPost}" title="Send tip">
             <svg class="action-icon monero-icon" viewBox="0 0 496 512" width="20" height="20"><path fill="currentColor" d="M352 384h108.4C417 455.9 338.1 504 248 504S79 455.9 35.6 384H144V256.2L248 361l104-105v128zM88 336V128l159.4 159.4L408 128v208h74.8c8.5-25.1 13.2-52 13.2-80C496 119 385 8 248 8S0 119 0 256c0 28 4.6 54.9 13.2 80H88z"/></svg>
           </button>
@@ -1060,6 +1064,28 @@ export async function renderPosts(posts, refreshUI) {
         fileInput.value = ''
       })
     }
+  })
+
+  // Add bookmark handlers (toggle)
+  dom.postsEl.querySelectorAll('.bookmark-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const pubkey = btn.dataset.pubkey
+      const timestamp = parseInt(btn.dataset.timestamp, 10)
+      if (!pubkey || !Number.isFinite(timestamp)) return
+      btn.disabled = true
+      try {
+        if (isBookmarked(pubkey, timestamp)) {
+          await removeBookmark(state.feed, state.identity, pubkey, timestamp)
+        } else {
+          await addBookmark(state.feed, state.identity, pubkey, timestamp)
+        }
+        await refreshUI()
+      } catch (err) {
+        alert('Error bookmarking: ' + err.message)
+        btn.disabled = false
+      }
+    })
   })
 
   // Add tip handlers

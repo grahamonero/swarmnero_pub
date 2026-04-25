@@ -35,6 +35,7 @@ import { SupporterManager, getSupporterManager } from './lib/supporter-manager.j
 import { SyncClient } from './lib/sync-client.js'
 import * as paywall from './lib/paywall.js'
 import * as paywallStorage from './lib/paywall-storage.js'
+import * as bookmarks from './lib/bookmarks.js'
 import { deriveLocalStorageKey } from './lib/dm-crypto.js'
 import { loadPeerProfiles } from './lib/peer-profile-cache.js'
 import { rebuildPublicSite, cleanLegacyPublicSiteFromMedia } from './lib/public-site.js'
@@ -1359,6 +1360,13 @@ async function continueInit(accountManager) {
     console.warn('[Paywall] loadUnlockedFromFeed error:', err.message)
   })
 
+  // Load bookmarks from our own feed (non-blocking)
+  bookmarks.loadBookmarks(feed, identity).then(() => {
+    scheduleRefresh(refreshUI)
+  }).catch(err => {
+    console.warn('[Bookmarks] load error:', err.message)
+  })
+
   // Background scanners for paywall:
   //   - Author scanner: process unlock_request events targeting our posts (releases keys)
   //   - Buyer scanner: process key_release events targeting us (decrypts content)
@@ -1492,6 +1500,9 @@ async function continueInit(accountManager) {
 
     // Clear paywall unlock cache
     paywall.clearUnlockedState()
+
+    // Clear bookmark cache
+    bookmarks.clearBookmarkState()
 
     // Disable discovery
     if (state.discovery) {
@@ -1629,6 +1640,9 @@ async function continueInit(accountManager) {
 
     // Clear paywall unlock cache (account switch)
     paywall.clearUnlockedState()
+
+    // Clear bookmark cache (account switch)
+    bookmarks.clearBookmarkState()
 
     // Stop sync status polling (will restart after switch)
     stopSyncStatusPolling()
@@ -1768,6 +1782,11 @@ async function continueInit(accountManager) {
     paywall.loadUnlockedFromFeed(newFeed, newIdentity).then(() => {
       scheduleRefresh(refreshUI)
     }).catch(e => console.warn('Paywall reload:', e))
+
+    // Reload bookmarks for new account (non-blocking)
+    bookmarks.loadBookmarks(newFeed, newIdentity).then(() => {
+      scheduleRefresh(refreshUI)
+    }).catch(e => console.warn('Bookmarks reload:', e))
 
     // Restart sync status polling for new account
     startSyncStatusPolling()

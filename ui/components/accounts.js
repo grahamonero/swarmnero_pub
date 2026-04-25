@@ -61,6 +61,9 @@ export function renderAccountDropdown() {
       <div class="account-nav-item" data-view-route="trending">
         <span class="nav-icon">📈</span>Trending
       </div>
+      <div class="account-nav-item" data-view-route="bookmarks">
+        <span class="nav-icon">🔖</span>Bookmarks
+      </div>
       <div class="account-nav-item" data-view-route="storage">
         <span class="nav-icon">💾</span>Storage
       </div>
