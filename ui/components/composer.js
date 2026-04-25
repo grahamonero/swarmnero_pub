@@ -51,6 +51,9 @@ export function showExpandedComposer() {
 
   renderSavedDraftsList()
   renderScheduledList()
+  if (dom.expPostBtn) {
+    dom.expPostBtn.textContent = dom.expScheduleToggle?.checked ? 'Schedule' : 'Post'
+  }
   dom.expPostContent.focus()
 }
 
@@ -105,6 +108,7 @@ function clearExpandedComposer() {
   if (dom.expScheduleToggle) dom.expScheduleToggle.checked = false
   if (dom.expScheduleFields) dom.expScheduleFields.classList.add('hidden')
   if (dom.expScheduleAt) dom.expScheduleAt.value = ''
+  if (dom.expPostBtn) dom.expPostBtn.textContent = 'Post'
 
   // Reset poll fields
   const pollToggle = document.getElementById('expPollToggle')
@@ -241,18 +245,16 @@ async function loadDraft(draftId) {
  * Render the list of saved drafts above the footer.
  */
 function renderSavedDraftsList() {
-  const el = dom.expSavedDraftsList
+  const el = dom.draftsModalList
   if (!el || !state.drafts) return
   const list = state.drafts.list().filter(d => d.id !== activeDraftId)
   if (list.length === 0) {
-    el.classList.add('hidden')
-    el.innerHTML = ''
+    el.innerHTML = '<div class="drafts-modal-empty">No saved drafts.</div>'
     return
   }
-  el.classList.remove('hidden')
   const items = list.map(d => {
     const when = new Date(d.updatedAt || Date.now()).toLocaleString()
-    const previewRaw = (d.content || '(no text)').slice(0, 60)
+    const previewRaw = (d.content || '(no text)').slice(0, 80)
     const preview = escapeText(previewRaw)
     return `<div class="entry" data-id="${d.id}">
       <span class="entry-text">${preview}</span>
@@ -263,7 +265,18 @@ function renderSavedDraftsList() {
       </span>
     </div>`
   })
-  el.innerHTML = `<div class="list-title">Saved drafts</div>${items.join('')}`
+  el.innerHTML = items.join('')
+}
+
+export function showDraftsModal() {
+  if (!dom.draftsModal) return
+  renderSavedDraftsList()
+  dom.draftsModal.classList.remove('hidden')
+}
+
+export function hideDraftsModal() {
+  if (!dom.draftsModal) return
+  dom.draftsModal.classList.add('hidden')
 }
 
 function renderScheduledList() {
@@ -522,7 +535,8 @@ async function scheduleExpandedPost(refreshUI) {
     return
   }
   const content = dom.expPostContent.value.trim()
-  if (!content && expPendingMedia.length === 0 && expPendingFiles.length === 0) return
+  const pollToggle = document.getElementById('expPollToggle')
+  const isPoll = !!pollToggle?.checked
 
   const whenStr = dom.expScheduleAt?.value || ''
   if (!whenStr) {
@@ -534,6 +548,65 @@ async function scheduleExpandedPost(refreshUI) {
     alert('Invalid send time.')
     return
   }
+
+  // Branch 1: scheduled poll
+  if (isPoll) {
+    if (expPendingMedia.length > 0 || expPendingFiles.length > 0) {
+      alert('Polls cannot include media attachments. Remove attachments or disable the poll toggle.')
+      return
+    }
+    if (content) {
+      alert('Polls do not include post text. Either clear the post text and put your question in the poll question field, or disable the poll toggle.')
+      return
+    }
+    const questionInput = document.getElementById('expPollQuestion')
+    const durationSelect = document.getElementById('expPollDuration')
+    const rawQuestion = (questionInput?.value || '').trim()
+    if (!rawQuestion) {
+      alert('Please enter a poll question.')
+      return
+    }
+    const optionInputs = Array.from(document.querySelectorAll('.poll-option-input'))
+    const options = optionInputs.map(i => i.value.trim()).filter(v => v.length > 0)
+    if (options.length < 2) {
+      alert('A poll needs at least 2 non-empty options.')
+      return
+    }
+    if (options.length > POLL_MAX_OPTIONS) {
+      alert(`Polls are capped at ${POLL_MAX_OPTIONS} options.`)
+      return
+    }
+    if (options.some(o => o.length > POLL_MAX_OPTION_LEN)) {
+      alert(`Each poll option is limited to ${POLL_MAX_OPTION_LEN} characters.`)
+      return
+    }
+    const durationMs = parseInt(durationSelect?.value || '86400000', 10)
+    if (!Number.isFinite(durationMs) || durationMs < 60 * 1000) {
+      alert('Please choose a valid poll duration.')
+      return
+    }
+    dom.expPostBtn.disabled = true
+    try {
+      state.scheduler.schedule({
+        payload: {
+          kind: 'poll',
+          poll: { question: rawQuestion, options, durationMs }
+        },
+        sendAt
+      })
+      if (activeDraftId && state.drafts) state.drafts.delete(activeDraftId)
+      clearExpandedComposer()
+      hideExpandedComposer()
+      renderScheduledList()
+      await refreshUI()
+    } catch (err) {
+      alert('Could not schedule poll: ' + err.message)
+    }
+    dom.expPostBtn.disabled = false
+    return
+  }
+
+  if (!content && expPendingMedia.length === 0 && expPendingFiles.length === 0) return
 
   const paywallToggle = document.getElementById('expPaywallToggle')
   const isPaywalled = !!paywallToggle?.checked
@@ -552,6 +625,23 @@ async function scheduleExpandedPost(refreshUI) {
       return
     }
     paywallMeta = { price, preview }
+  }
+
+  // Capture content warning
+  const cwToggle = document.getElementById('expCwToggle')
+  const cwLabelInput = document.getElementById('expCwLabel')
+  let cw = null
+  if (cwToggle?.checked) {
+    const raw = cwLabelInput?.value?.trim() || ''
+    if (!raw) {
+      alert('Please enter a content warning label, or turn the warning off.')
+      return
+    }
+    if (raw.length > MAX_CW_LENGTH) {
+      alert(`Content warning label is limited to ${MAX_CW_LENGTH} characters.`)
+      return
+    }
+    cw = raw
   }
 
   dom.expPostBtn.disabled = true
@@ -575,8 +665,10 @@ async function scheduleExpandedPost(refreshUI) {
 
     state.scheduler.schedule({
       payload: {
+        kind: 'post',
         content,
-        media: uploadedMedia
+        media: uploadedMedia,
+        cw
       },
       sendAt,
       paywall: paywallMeta
@@ -612,9 +704,17 @@ async function createExpandedPost(refreshUI) {
       alert('Polls cannot include media attachments. Remove attachments or disable the poll toggle.')
       return
     }
+    if (content) {
+      alert('Polls do not include post text. Either clear the post text and put your question in the poll question field, or disable the poll toggle.')
+      return
+    }
     const questionInput = document.getElementById('expPollQuestion')
     const durationSelect = document.getElementById('expPollDuration')
-    const rawQuestion = questionInput?.value?.trim() || content
+    const rawQuestion = (questionInput?.value || '').trim()
+    if (!rawQuestion) {
+      alert('Please enter a poll question.')
+      return
+    }
     const optionInputs = Array.from(document.querySelectorAll('.poll-option-input'))
     const options = optionInputs.map(i => i.value.trim()).filter(v => v.length > 0)
     const durationMs = parseInt(durationSelect?.value || '86400000', 10)
@@ -1048,20 +1148,26 @@ export function initComposer(refreshUI) {
     })
   }
 
-  // Click-delegation on the drafts + scheduled lists
-  if (dom.expSavedDraftsList) {
-    dom.expSavedDraftsList.addEventListener('click', async (e) => {
+  // Click-delegation on the drafts modal list
+  if (dom.draftsModalList) {
+    dom.draftsModalList.addEventListener('click', async (e) => {
       const btn = e.target.closest('button[data-action]')
       if (!btn) return
       const id = btn.getAttribute('data-id')
       const action = btn.getAttribute('data-action')
       if (action === 'load') {
+        hideDraftsModal()
+        showExpandedComposer()
         await loadDraft(id)
       } else if (action === 'delete') {
         state.drafts?.delete(id)
         renderSavedDraftsList()
       }
     })
+  }
+  const draftsModalCloseBtn = document.getElementById('draftsModalClose')
+  if (draftsModalCloseBtn) {
+    draftsModalCloseBtn.addEventListener('click', hideDraftsModal)
   }
   if (dom.expScheduledList) {
     dom.expScheduledList.addEventListener('click', (e) => {

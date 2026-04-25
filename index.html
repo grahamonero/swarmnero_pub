@@ -17,6 +17,8 @@
       <span class="menu-label">File</span>
       <div class="menu-dropdown">
         <div class="menu-option" id="menuNewPost">New Post</div>
+        <div class="menu-option" id="menuDrafts">Drafts...</div>
+        <div class="menu-divider"></div>
         <div class="menu-option" id="menuLogout">Logout</div>
       </div>
     </div>
@@ -51,8 +53,7 @@
     <header class="topnav">
       <div class="topnav-brand">
         <img src="./logo.png" alt="Swarmnero" class="logo-img">
-        <span class="topnav-wordmark">Swarmnero</span>
-        <span class="version" id="versionBadge">v0.8.54</span>
+        <span class="version" id="versionBadge">v0.8.55</span>
       </div>
       <nav class="topnav-tabs">
         <button id="feedNavBtn" class="nav-btn topnav-tab"><span class="nav-icon">🏠</span><span class="topnav-tab-label">Home</span></button>
@@ -182,8 +183,7 @@
               </div>
             </div>
 
-            <!-- Drafts + scheduled inline list -->
-            <div id="expSavedDraftsList" class="saved-drafts-list hidden"></div>
+            <!-- Scheduled posts list (drafts moved to File menu) -->
             <div id="expScheduledList" class="scheduled-list hidden"></div>
             <!-- Poll toggle and fields -->
             <div class="paywall-section">
@@ -845,6 +845,17 @@
   </div>
 
   <!-- No Tip Address Modal -->
+  <!-- Drafts Modal -->
+  <div class="modal hidden" id="draftsModal">
+    <div class="modal-content drafts-modal">
+      <h3>Saved Drafts</h3>
+      <div id="draftsModalList" class="drafts-modal-list"></div>
+      <div class="modal-actions">
+        <button id="draftsModalClose">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal hidden" id="noTipAddressModal">
     <div class="modal-content warning">
       <h3>Can't Tip This Post</h3>

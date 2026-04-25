@@ -145,8 +145,9 @@ export const dom = {
   expScheduleToggle: null,
   expScheduleFields: null,
   expScheduleAt: null,
-  expSavedDraftsList: null,
   expScheduledList: null,
+  draftsModal: null,
+  draftsModalList: null,
 
   // Three-column layout
   appLayout: null,
@@ -335,8 +336,9 @@ export function initDom() {
   dom.expScheduleToggle = document.getElementById('expScheduleToggle')
   dom.expScheduleFields = document.getElementById('expScheduleFields')
   dom.expScheduleAt = document.getElementById('expScheduleAt')
-  dom.expSavedDraftsList = document.getElementById('expSavedDraftsList')
   dom.expScheduledList = document.getElementById('expScheduledList')
+  dom.draftsModal = document.getElementById('draftsModal')
+  dom.draftsModalList = document.getElementById('draftsModalList')
 
   // Three-column layout
   dom.appLayout = document.getElementById('appLayout')

@@ -7,7 +7,7 @@ import { parseSwarmId } from './ui/utils/dom.js'
 
 // UI modules
 import { state, dom, initDom, initState } from './ui/state.js'
-import { initComposer, showExpandedComposer } from './ui/components/composer.js'
+import { initComposer, showExpandedComposer, showDraftsModal } from './ui/components/composer.js'
 import { renderPosts, scheduleRefresh, setOnAuthorClick, setOnThreadClick, setRefreshUICallback, resetTimelinePagination, showToast } from './ui/components/timeline.js'
 import { initProfile, updateProfileForm, updateProfileWithNewSubaddress, renderHeaderSyncStatus, startSyncStatusPolling, stopSyncStatusPolling } from './ui/components/profile.js'
 import { initFollow, renderFollowing } from './ui/components/follow.js'
@@ -310,6 +310,11 @@ function initMenuBar() {
   // File > New Post
   document.getElementById('menuNewPost')?.addEventListener('click', () => {
     showExpandedComposer()
+  })
+
+  // File > Drafts...
+  document.getElementById('menuDrafts')?.addEventListener('click', () => {
+    showDraftsModal()
   })
 
   // File > Logout
