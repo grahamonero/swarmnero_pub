@@ -1182,6 +1182,13 @@ async function handleUnlock() {
     // Show privacy notice (once per session)
     showPrivacyNotice()
 
+    // Nudge the scheduler so any paywalled posts queued while the wallet
+    // was locked get a chance to fire immediately instead of waiting for
+    // the next periodic tick.
+    if (state.scheduler) {
+      state.scheduler.tick().catch(() => {})
+    }
+
     // Render panel with sync progress
     await renderUnlockedStateWithSync(state.activeAccountName)
   } catch (e) {

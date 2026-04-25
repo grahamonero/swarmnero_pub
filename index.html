@@ -151,11 +151,31 @@
                 <p class="paywall-hint">Your post body above will be encrypted. Only buyers who pay this price in XMR will be able to read it. Your wallet must be unlocked to create paywalled posts.</p>
               </div>
             </div>
+
+            <!-- Schedule toggle and fields -->
+            <div class="schedule-section">
+              <label class="schedule-toggle">
+                <input type="checkbox" id="expScheduleToggle">
+                <span class="schedule-toggle-label">⏰ Schedule this post</span>
+              </label>
+              <div id="expScheduleFields" class="schedule-fields hidden">
+                <div class="schedule-field">
+                  <label for="expScheduleAt">Send at (local time)</label>
+                  <input type="datetime-local" id="expScheduleAt">
+                </div>
+                <p class="schedule-hint">Must be at least 1 minute and at most 365 days in the future. The post is signed at send time — your app must be running (or start before the send time) for delivery.</p>
+              </div>
+            </div>
+
+            <!-- Drafts + scheduled inline list -->
+            <div id="expSavedDraftsList" class="saved-drafts-list hidden"></div>
+            <div id="expScheduledList" class="scheduled-list hidden"></div>
           </div>
           <div class="expanded-composer-footer">
             <span class="char-count"><span id="expCharCount">0</span> characters</span>
             <div class="expanded-composer-actions">
               <button id="cancelExpandedPost" class="btn-secondary">Cancel</button>
+              <button id="expSaveDraftBtn" class="btn-secondary" type="button">Save draft</button>
               <button id="expPostBtn" disabled>Post</button>
             </div>
           </div>

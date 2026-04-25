@@ -64,6 +64,10 @@ export const state = {
   // Tip Batcher (delayed tip broadcasts for privacy)
   tipBatcher: null, // TipBatcher instance
 
+  // Drafts + scheduled posts (per-account, cleared on switch)
+  drafts: null,
+  scheduler: null,
+
   // Tip Notifications (incoming tips)
   tipNotifications: [], // Array of { id, amount, postTimestamp, txid, receivedAt, dismissed }
 
@@ -137,6 +141,12 @@ export const dom = {
   expEmojiBtn: null,
   expEmojiPicker: null,
   expEmojiGrid: null,
+  expSaveDraftBtn: null,
+  expScheduleToggle: null,
+  expScheduleFields: null,
+  expScheduleAt: null,
+  expSavedDraftsList: null,
+  expScheduledList: null,
 
   // Three-column layout
   appLayout: null,
@@ -317,6 +327,12 @@ export function initDom() {
   dom.expEmojiBtn = document.getElementById('expEmojiBtn')
   dom.expEmojiPicker = document.getElementById('expEmojiPicker')
   dom.expEmojiGrid = document.getElementById('expEmojiGrid')
+  dom.expSaveDraftBtn = document.getElementById('expSaveDraftBtn')
+  dom.expScheduleToggle = document.getElementById('expScheduleToggle')
+  dom.expScheduleFields = document.getElementById('expScheduleFields')
+  dom.expScheduleAt = document.getElementById('expScheduleAt')
+  dom.expSavedDraftsList = document.getElementById('expSavedDraftsList')
+  dom.expScheduledList = document.getElementById('expScheduledList')
 
   // Three-column layout
   dom.appLayout = document.getElementById('appLayout')
