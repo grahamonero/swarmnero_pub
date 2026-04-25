@@ -5,7 +5,7 @@
 import { state, dom } from '../state.js'
 import { wrapSelection, insertAtCursor } from '../utils/dom.js'
 import { initEmojiPicker, toggleEmojiPicker } from '../utils/emoji.js'
-import { createPostEvent } from '../../lib/events.js'
+import { createPostEvent, MAX_CW_LENGTH } from '../../lib/events.js'
 import * as wallet from '../../lib/wallet.js'
 import { extractHashtags } from '../../lib/tag-extractor.js'
 import { createPaywalledPost, persistContentKey, cacheUnlockedContent } from '../../lib/paywall.js'
@@ -76,6 +76,16 @@ function clearExpandedComposer() {
   if (fields) fields.classList.add('hidden')
   if (priceInput) priceInput.value = ''
   if (previewInput) previewInput.value = ''
+
+  // Reset CW fields
+  const cwToggle = document.getElementById('expCwToggle')
+  const cwFields = document.getElementById('expCwFields')
+  const cwLabelInput = document.getElementById('expCwLabel')
+  const cwCharCount = document.getElementById('expCwCharCount')
+  if (cwToggle) cwToggle.checked = false
+  if (cwFields) cwFields.classList.add('hidden')
+  if (cwLabelInput) cwLabelInput.value = ''
+  if (cwCharCount) cwCharCount.textContent = '0'
 
   // Hide metadata warning (shown only when video/file is pending)
   document.getElementById('metadataWarningHint')?.classList.add('hidden')
@@ -257,6 +267,23 @@ async function createExpandedPost(refreshUI) {
     }
   }
 
+  // Check content warning toggle
+  const cwToggle = document.getElementById('expCwToggle')
+  const cwLabelInput = document.getElementById('expCwLabel')
+  let cw = null
+  if (cwToggle?.checked) {
+    const raw = cwLabelInput?.value?.trim() || ''
+    if (!raw) {
+      alert('Please enter a content warning label, or turn the warning off.')
+      return
+    }
+    if (raw.length > MAX_CW_LENGTH) {
+      alert(`Content warning must be ${MAX_CW_LENGTH} characters or fewer.`)
+      return
+    }
+    cw = raw
+  }
+
   dom.expPostBtn.disabled = true
   try {
     // Upload pending media
@@ -301,7 +328,8 @@ async function createExpandedPost(refreshUI) {
         paywallPreview: paywallFields.paywallPreview,
         paywallEncrypted: paywallFields.paywallEncrypted,
         paywallSubaddress: paywallFields.paywallSubaddress,
-        paywallSubaddressIndex: paywallFields.paywallSubaddressIndex
+        paywallSubaddressIndex: paywallFields.paywallSubaddressIndex,
+        cw
       }))
 
       // Persist the content key under the actual timestamp assigned by feed.append
@@ -330,7 +358,8 @@ async function createExpandedPost(refreshUI) {
         content,
         media: uploadedMedia.length > 0 ? uploadedMedia : undefined,
         subaddress,
-        subaddressIndex: subaddress_index
+        subaddressIndex: subaddress_index,
+        cw
       }))
     }
 
@@ -513,6 +542,27 @@ export function initComposer(refreshUI) {
       } else {
         paywallFields.classList.add('hidden')
       }
+    })
+  }
+
+  // Content warning toggle - show/hide label field
+  const cwToggle = document.getElementById('expCwToggle')
+  const cwFields = document.getElementById('expCwFields')
+  const cwLabelInput = document.getElementById('expCwLabel')
+  const cwCharCount = document.getElementById('expCwCharCount')
+  if (cwToggle && cwFields) {
+    cwToggle.addEventListener('change', () => {
+      if (cwToggle.checked) {
+        cwFields.classList.remove('hidden')
+        cwLabelInput?.focus()
+      } else {
+        cwFields.classList.add('hidden')
+      }
+    })
+  }
+  if (cwLabelInput && cwCharCount) {
+    cwLabelInput.addEventListener('input', () => {
+      cwCharCount.textContent = cwLabelInput.value.length
     })
   }
 

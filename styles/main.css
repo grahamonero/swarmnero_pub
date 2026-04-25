@@ -6954,3 +6954,146 @@ body.duplicate-instance-active .paywall-unlock-btn {
   font-family: var(--font-mono);
 }
 .account-nav-item .badge.hidden { display: none; }
+
+/* ===========================
+   Content warning (CW)
+   =========================== */
+.cw-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #30363d;
+}
+
+.cw-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #c9d1d9;
+}
+
+.cw-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.cw-toggle-label {
+  user-select: none;
+}
+
+.cw-fields {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(22, 27, 34, 0.6);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+}
+
+.cw-fields.hidden {
+  display: none;
+}
+
+.cw-field label {
+  display: block;
+  font-size: 0.8rem;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+.cw-field input {
+  width: 100%;
+  padding: 8px 10px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #c9d1d9;
+  font-size: 0.9rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.cw-field input:focus {
+  outline: none;
+  border-color: #ff9933;
+}
+
+.cw-char-count {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: #8b949e;
+  text-align: right;
+}
+
+/* CW render wrapper in timeline/thread */
+.cw-wrapper {
+  position: relative;
+}
+
+.cw-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  background: linear-gradient(135deg, rgba(255, 153, 51, 0.08) 0%, rgba(255, 102, 0, 0.04) 100%);
+  border: 1px solid rgba(255, 153, 51, 0.3);
+  border-radius: 8px;
+}
+
+.cw-icon {
+  font-size: 1.1rem;
+  color: #ff9933;
+}
+
+.cw-label {
+  flex: 1;
+  color: #c9d1d9;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.cw-reveal-btn {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid #ff9933;
+  border-radius: 6px;
+  color: #ff9933;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cw-reveal-btn:hover {
+  background: rgba(255, 153, 51, 0.1);
+}
+
+.cw-wrapper.cw-revealed .cw-placeholder {
+  display: none;
+}
+
+.cw-content.hidden {
+  display: none;
+}
+
+/* ===========================
+   Reply depth collapse stub
+   =========================== */
+.replies-collapsed-stub {
+  margin: 8px 0 0 16px;
+}
+
+.replies-expand-btn {
+  background: transparent;
+  border: 1px dashed #30363d;
+  border-radius: 6px;
+  color: #8b949e;
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.replies-expand-btn:hover {
+  border-color: #ff9933;
+  color: #c9d1d9;
+}
