@@ -393,8 +393,14 @@ function updateTagHint() {
  */
 function updateExpCharCount() {
   dom.expCharCount.textContent = dom.expPostContent.value.length
-  dom.expPostBtn.disabled = dom.expPostContent.value.trim().length === 0 &&
+  const composerEmpty = dom.expPostContent.value.trim().length === 0 &&
     expPendingMedia.length === 0 && expPendingFiles.length === 0
+  const pollOn = !!document.getElementById('expPollToggle')?.checked
+  const pollQuestionFilled = ((document.getElementById('expPollQuestion')?.value) || '').trim().length > 0
+  // When poll mode is on, either the composer text or the poll question can
+  // supply the question, so a filled poll question alone is enough to enable
+  // the Post button even with an empty composer.
+  dom.expPostBtn.disabled = composerEmpty && !(pollOn && pollQuestionFilled)
   updateTagHint()
   updateMetadataWarning()
   scheduleDraftAutosave()
@@ -1201,7 +1207,12 @@ export function initComposer(refreshUI) {
       } else {
         pollFields.classList.add('hidden')
       }
+      updateExpCharCount()
     })
+  }
+  const pollQuestionInput = document.getElementById('expPollQuestion')
+  if (pollQuestionInput) {
+    pollQuestionInput.addEventListener('input', updateExpCharCount)
   }
   if (paywallToggle && pollToggle) {
     paywallToggle.addEventListener('change', () => {
