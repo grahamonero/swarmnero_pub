@@ -6323,6 +6323,11 @@ button:disabled {
 }
 
 .schedule-field input:focus {
+  outline: none;
+  border-color: #ff6600;
+}
+
+/* ===========================
    Poll card in feed
    =========================== */
 .poll-card .poll-question {
