@@ -52,7 +52,7 @@
       <div class="topnav-brand">
         <img src="./logo.png" alt="Swarmnero" class="logo-img">
         <span class="topnav-wordmark">Swarmnero</span>
-        <span class="version" id="versionBadge">v0.8.53</span>
+        <span class="version" id="versionBadge">v0.8.54</span>
       </div>
       <nav class="topnav-tabs">
         <button id="feedNavBtn" class="nav-btn topnav-tab"><span class="nav-icon">🏠</span><span class="topnav-tab-label">Home</span></button>
@@ -151,11 +151,75 @@
                 <p class="paywall-hint">Your post body above will be encrypted. Only buyers who pay this price in XMR will be able to read it. Your wallet must be unlocked to create paywalled posts.</p>
               </div>
             </div>
+
+            <!-- Content warning toggle and field -->
+            <div class="cw-section">
+              <label class="cw-toggle">
+                <input type="checkbox" id="expCwToggle">
+                <span class="cw-toggle-label">⚠ Add content warning</span>
+              </label>
+              <div id="expCwFields" class="cw-fields hidden">
+                <div class="cw-field">
+                  <label for="expCwLabel">Warning label (shown in place of the post until revealed)</label>
+                  <input type="text" id="expCwLabel" maxlength="200" placeholder="e.g. spoilers, NSFW, politics">
+                  <div class="cw-char-count"><span id="expCwCharCount">0</span> / 200</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Schedule toggle and fields -->
+            <div class="schedule-section">
+              <label class="schedule-toggle">
+                <input type="checkbox" id="expScheduleToggle">
+                <span class="schedule-toggle-label">⏰ Schedule this post</span>
+              </label>
+              <div id="expScheduleFields" class="schedule-fields hidden">
+                <div class="schedule-field">
+                  <label for="expScheduleAt">Send at (local time)</label>
+                  <input type="datetime-local" id="expScheduleAt">
+                </div>
+                <p class="schedule-hint">Must be at least 1 minute and at most 365 days in the future. The post is signed at send time — your app must be running (or start before the send time) for delivery.</p>
+              </div>
+            </div>
+
+            <!-- Drafts + scheduled inline list -->
+            <div id="expSavedDraftsList" class="saved-drafts-list hidden"></div>
+            <div id="expScheduledList" class="scheduled-list hidden"></div>
+            <!-- Poll toggle and fields -->
+            <div class="paywall-section">
+              <label class="paywall-toggle">
+                <input type="checkbox" id="expPollToggle">
+                <span class="paywall-toggle-label">&#128200; Add poll</span>
+              </label>
+              <div id="expPollFields" class="paywall-fields hidden">
+                <div class="paywall-field">
+                  <label for="expPollQuestion">Question (optional &mdash; composer text above is used if blank)</label>
+                  <input type="text" id="expPollQuestion" maxlength="280" placeholder="What's your question?">
+                </div>
+                <div class="paywall-field">
+                  <label>Options (2&ndash;10, max 100 chars each)</label>
+                  <div id="expPollOptionsList"></div>
+                  <button type="button" id="expPollAddOptionBtn" class="btn-secondary" style="margin-top:6px;">+ Add option</button>
+                </div>
+                <div class="paywall-field">
+                  <label for="expPollDuration">Duration</label>
+                  <select id="expPollDuration">
+                    <option value="3600000">1 hour</option>
+                    <option value="21600000">6 hours</option>
+                    <option value="86400000" selected>1 day</option>
+                    <option value="259200000">3 days</option>
+                    <option value="604800000">1 week</option>
+                  </select>
+                </div>
+                <p class="paywall-hint">Votes are public and signed by each voter&apos;s feed &mdash; anyone replicating the feed can see who voted for what. Tallies are computed locally and de-duplicated per voter (latest vote wins).</p>
+              </div>
+            </div>
           </div>
           <div class="expanded-composer-footer">
             <span class="char-count"><span id="expCharCount">0</span> characters</span>
             <div class="expanded-composer-actions">
               <button id="cancelExpandedPost" class="btn-secondary">Cancel</button>
+              <button id="expSaveDraftBtn" class="btn-secondary" type="button">Save draft</button>
               <button id="expPostBtn" disabled>Post</button>
             </div>
           </div>
@@ -441,6 +505,19 @@
           <div class="panel-content">
             <div id="notificationsContent">
               <!-- Pending notifications rendered here -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Bookmarks section -->
+        <div id="bookmarks-section" class="panel-section hidden">
+          <div class="panel-header">
+            <h3>Bookmarks</h3>
+            <button class="close-panel" data-close="bookmarks">&times;</button>
+          </div>
+          <div class="panel-content">
+            <div id="bookmarksContent">
+              <!-- Rendered by bookmarks.js -->
             </div>
           </div>
         </div>

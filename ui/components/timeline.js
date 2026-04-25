@@ -4,19 +4,23 @@
 
 import { state, dom } from '../state.js'
 import { escapeHtml, wrapSelection, insertAtCursor, safeAvatarUrl, safeWebsiteUrl } from '../utils/dom.js'
-import { initEmojiPicker } from '../utils/emoji.js'
+import { initEmojiPicker, emojis as EMOJI_PICKER_LIST } from '../utils/emoji.js'
 import { formatTime, getDisplayName, renderMarkdown, formatFileSize, getOnlineDotHtml } from '../utils/format.js'
 import {
   createDeleteEvent,
-  createLikeEvent,
+  createReactionEvent,
   createRepostEvent,
   createReplyEvent,
   createReplyMetadataEvent,
+  createPollVoteEvent,
   getInteractionCounts,
-  hasLiked,
+  getUserReaction,
+  isValidReactionEmoji,
   hasReposted,
   getReplies,
-  getAllRepliesFlat
+  getAllRepliesFlat,
+  tallyPollVotes,
+  validatePollEvent
 } from '../../lib/events.js'
 import { showTipModal } from './tip.js'
 import { getSupporterManager } from '../../lib/supporter-manager.js'
@@ -24,6 +28,7 @@ import { showFollowingModal, showFollowersModal, getFollowingForPubkey, getFollo
 import { isPaywalledPost } from '../../lib/events.js'
 import { getUnlockedContent, isPostUnlocked } from '../../lib/paywall.js'
 import { showPaywallUnlockModal } from './paywall-modal.js'
+import { isBookmarked, addBookmark, removeBookmark } from '../../lib/bookmarks.js'
 import { isAuthorOnline } from '../utils/format.js'
 import { schedulePublicSiteRebuild } from '../../app.js'
 import { MAX_PEER_FILE_BYTES } from '../../lib/media.js'
@@ -164,6 +169,221 @@ function appendMediaElement(container, m, url) {
   }
 }
 
+// Render a list of media descriptors. Images group into a carousel; videos and
+// files render inline individually (they don't lightbox the same way).
+//   1 image  -> full-width inline
+//   2-3      -> equal-width grid row
+//   4+       -> first 3 tiles + "+N more" overflow tile
+// Any image tile click opens a swipeable lightbox across the full image set.
+async function renderMediaCollection(container, authorPubkey, mediaList) {
+  if (!Array.isArray(mediaList) || mediaList.length === 0) return
+
+  const images = []
+  const rest = []
+  for (const m of mediaList) {
+    const isImage = (m?.mimeType && m.mimeType.startsWith('image/')) && m.type !== 'video'
+    if (isImage) images.push(m)
+    else rest.push(m)
+  }
+
+  if (images.length === 0) {
+    for (const m of rest) await renderMediaInto(container, authorPubkey, m)
+    return
+  }
+
+  if (images.length === 1 && rest.length === 0) {
+    await renderMediaInto(container, authorPubkey, images[0])
+    return
+  }
+
+  const visibleCount = Math.min(images.length, 3)
+  const overflow = images.length - visibleCount
+
+  const grid = document.createElement('div')
+  grid.className = `carousel-grid carousel-grid-${visibleCount}`
+  container.appendChild(grid)
+
+  for (let i = 0; i < visibleCount; i++) {
+    const tile = document.createElement('button')
+    tile.type = 'button'
+    tile.className = 'carousel-tile'
+    tile.setAttribute('aria-label', `Image ${i + 1} of ${images.length}`)
+    await renderCarouselTile(tile, authorPubkey, images[i])
+    if (i === visibleCount - 1 && overflow > 0) {
+      const badge = document.createElement('span')
+      badge.className = 'carousel-overflow-badge'
+      badge.textContent = `+${overflow}`
+      tile.appendChild(badge)
+    }
+    tile.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      openLightbox(authorPubkey, images, i)
+    })
+    grid.appendChild(tile)
+  }
+
+  for (const m of rest) await renderMediaInto(container, authorPubkey, m)
+}
+
+// Populate a tile with either the inline thumb (if the author shipped one) or
+// the on-drive image. Thumbnail decode is wrapped in try/catch; on any failure
+// we drop a placeholder icon in so render never crashes the post.
+async function renderCarouselTile(tile, authorPubkey, m) {
+  try {
+    if (m.thumb && typeof m.thumb === 'string' && m.thumb.startsWith('data:image/')) {
+      const img = document.createElement('img')
+      img.src = m.thumb
+      img.alt = 'attachment'
+      img.className = 'carousel-thumb'
+      img.onerror = () => replaceWithPlaceholder(tile)
+      tile.appendChild(img)
+      return
+    }
+  } catch (err) {
+    console.warn('[Carousel] thumb render failed, falling back to full fetch:', err?.message)
+  }
+
+  try {
+    const trusted = isAuthorFollowed(authorPubkey)
+    const url = await state.media.getImageUrl(m.driveKey, m.path, { noSizeCap: trusted })
+    if (!url) {
+      replaceWithPlaceholder(tile)
+      return
+    }
+    const img = document.createElement('img')
+    img.src = url
+    img.alt = 'attachment'
+    img.className = 'carousel-thumb'
+    img.onerror = () => replaceWithPlaceholder(tile)
+    tile.appendChild(img)
+  } catch (err) {
+    console.warn('[Carousel] full fetch failed, rendering placeholder:', err?.message)
+    replaceWithPlaceholder(tile)
+  }
+}
+
+function replaceWithPlaceholder(tile) {
+  tile.innerHTML = ''
+  const ph = document.createElement('span')
+  ph.className = 'carousel-placeholder'
+  ph.textContent = '\u{1F5BC}'
+  tile.appendChild(ph)
+}
+
+// Simple swipeable lightbox. Dismiss on overlay click / Esc. Left-right arrow
+// keys and on-screen prev/next for navigation. Pointer drag also swipes.
+function openLightbox(authorPubkey, images, startIndex) {
+  document.querySelector('.carousel-lightbox')?.remove()
+
+  const overlay = document.createElement('div')
+  overlay.className = 'carousel-lightbox'
+
+  const stage = document.createElement('div')
+  stage.className = 'carousel-lightbox-stage'
+  const imgEl = document.createElement('img')
+  imgEl.className = 'carousel-lightbox-image'
+  imgEl.alt = ''
+  stage.appendChild(imgEl)
+
+  const prev = document.createElement('button')
+  prev.type = 'button'
+  prev.className = 'carousel-lightbox-nav carousel-lightbox-prev'
+  prev.textContent = '\u2039'
+  prev.setAttribute('aria-label', 'Previous image')
+
+  const next = document.createElement('button')
+  next.type = 'button'
+  next.className = 'carousel-lightbox-nav carousel-lightbox-next'
+  next.textContent = '\u203A'
+  next.setAttribute('aria-label', 'Next image')
+
+  const close = document.createElement('button')
+  close.type = 'button'
+  close.className = 'carousel-lightbox-close'
+  close.textContent = '\u00D7'
+  close.setAttribute('aria-label', 'Close')
+
+  const counter = document.createElement('div')
+  counter.className = 'carousel-lightbox-counter'
+
+  overlay.appendChild(stage)
+  overlay.appendChild(prev)
+  overlay.appendChild(next)
+  overlay.appendChild(close)
+  overlay.appendChild(counter)
+  document.body.appendChild(overlay)
+
+  let idx = Math.max(0, Math.min(startIndex, images.length - 1))
+  let currentUrl = null
+
+  async function showAt(i) {
+    idx = (i + images.length) % images.length
+    counter.textContent = `${idx + 1} / ${images.length}`
+    prev.disabled = images.length < 2
+    next.disabled = images.length < 2
+
+    if (currentUrl) {
+      try { URL.revokeObjectURL(currentUrl) } catch {}
+      currentUrl = null
+    }
+
+    const m = images[idx]
+    imgEl.src = ''
+    try {
+      const trusted = isAuthorFollowed(authorPubkey)
+      const url = await state.media.getImageUrl(m.driveKey, m.path, { noSizeCap: trusted })
+      if (url) {
+        currentUrl = url
+        imgEl.src = url
+      } else if (m.thumb && m.thumb.startsWith('data:image/')) {
+        imgEl.src = m.thumb
+      } else {
+        imgEl.alt = 'Image failed to load'
+      }
+    } catch (err) {
+      console.warn('[Carousel] lightbox load failed:', err?.message)
+      if (m.thumb && m.thumb.startsWith('data:image/')) imgEl.src = m.thumb
+    }
+  }
+
+  function dismiss() {
+    if (currentUrl) {
+      try { URL.revokeObjectURL(currentUrl) } catch {}
+    }
+    document.removeEventListener('keydown', onKey)
+    overlay.remove()
+  }
+
+  function onKey(e) {
+    if (e.key === 'Escape') dismiss()
+    else if (e.key === 'ArrowLeft') showAt(idx - 1)
+    else if (e.key === 'ArrowRight') showAt(idx + 1)
+  }
+
+  prev.addEventListener('click', (e) => { e.stopPropagation(); showAt(idx - 1) })
+  next.addEventListener('click', (e) => { e.stopPropagation(); showAt(idx + 1) })
+  close.addEventListener('click', (e) => { e.stopPropagation(); dismiss() })
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss() })
+  stage.addEventListener('click', (e) => e.stopPropagation())
+  document.addEventListener('keydown', onKey)
+
+  // Pointer swipe
+  let pointerStartX = null
+  stage.addEventListener('pointerdown', (e) => { pointerStartX = e.clientX })
+  stage.addEventListener('pointerup', (e) => {
+    if (pointerStartX == null) return
+    const dx = e.clientX - pointerStartX
+    pointerStartX = null
+    if (Math.abs(dx) > 40) {
+      if (dx < 0) showAt(idx + 1)
+      else showAt(idx - 1)
+    }
+  })
+
+  showAt(idx)
+}
+
 // Callback for author clicks (set by app.js)
 let onAuthorClickCallback = null
 // Callback for thread clicks (set by app.js)
@@ -172,6 +392,17 @@ let onThreadClickCallback = null
 let refreshUICallback = null
 // Track pending media/files per inline reply form (keyed by form element)
 const inlineReplyMedia = new WeakMap() // form -> { media: File[], files: File[] }
+
+// Default UI collapse depth for nested replies. Anything past this depth is
+// hidden behind a "+N more replies" stub until the user explicitly expands
+// that thread. The parser (lib/events.js) enforces a separate hard cap of
+// MAX_REPLY_DEPTH for DoS protection — this is purely a render-layer default.
+const UI_REPLY_COLLAPSE_DEPTH = 3
+
+// Per-post expansion state: "<pubkey>:<timestamp>" of post roots whose deep
+// replies the user has chosen to reveal. Cleared by resetTimelinePagination
+// on account switch / major view change.
+const expandedReplyThreads = new Set()
 
 // Flag to prevent renderPosts from overwriting center column profile/thread views
 let centerViewActive = false
@@ -235,6 +466,7 @@ export function scheduleRefresh(refreshUI) {
  */
 export function resetTimelinePagination() {
   state.timelineVisibleCount = state.timelinePageSize
+  expandedReplyThreads.clear()
 }
 
 /**
@@ -249,6 +481,114 @@ export function updatePostCount(timeline) {
 
   if (dom.postCountDisplay) {
     dom.postCountDisplay.textContent = `${visiblePosts.length} of ${allPosts.length} posts`
+  }
+}
+
+/**
+ * Render the reaction cluster (emoji+count chips + "add" button) for a post
+ * or reply. Every emoji rendered here is passed through escapeHtml; ingest
+ * validation drops invalid shapes but old events on disk could bypass it.
+ */
+function renderReactionCluster(reactions, myReaction, pubkey, timestamp, { isOwn, inReply = false } = {}) {
+  const safePk = escapeHtml(pubkey || '')
+  const safeTs = escapeHtml(String(timestamp || ''))
+  const chips = reactions.map(r => {
+    const mine = myReaction === r.emoji
+    const cls = `reaction-chip${mine ? ' mine' : ''}`
+    const disabled = isOwn ? ' disabled' : ''
+    return `<button class="${cls}" data-pubkey="${safePk}" data-timestamp="${safeTs}" data-emoji="${escapeHtml(r.emoji)}"${disabled} title="React">
+      <span class="reaction-emoji">${escapeHtml(r.emoji)}</span>
+      <span class="reaction-count">${r.count}</span>
+    </button>`
+  }).join('')
+
+  // "Add reaction" button. Authors of their own post can't react to themselves.
+  const addBtn = !isOwn ? `<button class="reaction-add-btn" data-pubkey="${safePk}" data-timestamp="${safeTs}" title="Add reaction">
+    <span class="reaction-add-icon">+</span>
+  </button>` : ''
+
+  // Hidden picker panel. Populated on demand by wireReactionHandlers.
+  const picker = !isOwn ? `<div class="reaction-picker hidden" data-pubkey="${safePk}" data-timestamp="${safeTs}">
+    <div class="reaction-picker-grid"></div>
+  </div>` : ''
+
+  return `<div class="reactions-cluster${inReply ? ' reactions-cluster-reply' : ''}">${chips}${addBtn}${picker}</div>`
+}
+
+/**
+ * Wire click handlers for reaction chips, "+" buttons, and per-post pickers.
+ * Called after postsEl innerHTML is replaced.
+ */
+function wireReactionHandlers(containerEl, timeline, myPubkey, refreshUI) {
+  const toggleReaction = async (toPubkey, postTimestamp, emoji) => {
+    if (!isValidReactionEmoji(emoji)) return
+    const current = getUserReaction(timeline, myPubkey, toPubkey, postTimestamp)
+    // Append-only feed: we can't remove a prior reaction. If user clicks their
+    // current emoji we treat it as a no-op; clicking a different emoji adds a
+    // second reaction bucket for that pubkey.
+    if (current === emoji) return
+    try {
+      await state.feed.append(createReactionEvent({ toPubkey, postTimestamp, emoji }))
+      await refreshUI()
+    } catch (err) {
+      alert('Error reacting: ' + err.message)
+    }
+  }
+
+  // Chip click: toggle that emoji for the current user
+  containerEl.querySelectorAll('.reaction-chip').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      if (btn.disabled) return
+      const toPubkey = btn.dataset.pubkey
+      const postTimestamp = parseInt(btn.dataset.timestamp)
+      const emoji = btn.dataset.emoji
+      await toggleReaction(toPubkey, postTimestamp, emoji)
+    })
+  })
+
+  // "+" button: reveal picker for this post
+  containerEl.querySelectorAll('.reaction-add-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const pk = btn.dataset.pubkey
+      const ts = btn.dataset.timestamp
+      const picker = containerEl.querySelector(`.reaction-picker[data-pubkey="${pk}"][data-timestamp="${ts}"]`)
+      if (!picker) return
+      // Close all other pickers first
+      containerEl.querySelectorAll('.reaction-picker').forEach(p => {
+        if (p !== picker) p.classList.add('hidden')
+      })
+      const grid = picker.querySelector('.reaction-picker-grid')
+      if (grid && !grid.dataset.populated) {
+        grid.dataset.populated = '1'
+        for (const em of EMOJI_PICKER_LIST) {
+          if (!isValidReactionEmoji(em)) continue
+          const emBtn = document.createElement('button')
+          emBtn.type = 'button'
+          emBtn.className = 'reaction-picker-btn'
+          // textContent handles the rendering safely; DOM avoids HTML parsing
+          emBtn.textContent = em
+          emBtn.addEventListener('click', async (evt) => {
+            evt.stopPropagation()
+            picker.classList.add('hidden')
+            await toggleReaction(pk, parseInt(ts), em)
+          })
+          grid.appendChild(emBtn)
+        }
+      }
+      picker.classList.toggle('hidden')
+    })
+  })
+
+  // Close pickers on outside click. Guard against duplicate binding across
+  // renders — dom.postsEl persists even when its innerHTML is replaced.
+  if (!containerEl.dataset.reactionOutsideBound) {
+    containerEl.dataset.reactionOutsideBound = '1'
+    containerEl.addEventListener('click', (e) => {
+      if (e.target.closest('.reaction-add-btn') || e.target.closest('.reaction-picker')) return
+      containerEl.querySelectorAll('.reaction-picker').forEach(p => p.classList.add('hidden'))
+    })
   }
 }
 
@@ -293,17 +633,30 @@ export async function renderPosts(posts, refreshUI) {
     p.type === 'repost' && !deletedKeys.has(`${p.pubkey}:${p.timestamp}`)
   )
 
+  // Get all poll events (exclude deleted ones, validate structure)
+  let pollEvents = posts.filter(p =>
+    p.type === 'poll' &&
+    !deletedKeys.has(`${p.pubkey}:${p.timestamp}`) &&
+    validatePollEvent(p)
+  )
+
   if (filterMyOnly) {
     postEvents = postEvents.filter(p => p.pubkey === myPubkey)
     repostEvents = repostEvents.filter(p => p.pubkey === myPubkey)
+    pollEvents = pollEvents.filter(p => p.pubkey === myPubkey)
   }
 
-  // Build timeline items: original posts + reposts (sorted by time)
+  // Build timeline items: original posts + reposts + polls (sorted by time)
   const timelineItems = []
 
   // Add original posts
   for (const post of postEvents) {
     timelineItems.push({ type: 'post', post, timestamp: post.timestamp })
+  }
+
+  // Add polls
+  for (const poll of pollEvents) {
+    timelineItems.push({ type: 'poll', poll, timestamp: poll.timestamp })
   }
 
   // Add reposts (find original post and wrap it)
@@ -381,11 +734,21 @@ export async function renderPosts(posts, refreshUI) {
 
     // Get interaction counts
     const counts = getInteractionCounts(posts, post.pubkey, post.timestamp)
-    const liked = hasLiked(posts, myPubkey, post.pubkey, post.timestamp)
+    const postReactions = counts.reactions || []
+    const myReaction = getUserReaction(posts, myPubkey, post.pubkey, post.timestamp)
     const reposted = hasReposted(posts, myPubkey, post.pubkey, post.timestamp)
 
-    // Get all replies in thread (including nested replies to replies)
-    const replies = getAllRepliesFlat(posts, post.pubkey, post.timestamp)
+    // Get all replies in thread (including nested replies to replies).
+    // The parser caps recursion at MAX_REPLY_DEPTH for DoS protection; here we
+    // apply a softer UI-layer collapse that hides replies deeper than
+    // UI_REPLY_COLLAPSE_DEPTH behind a "+N more replies" stub.
+    const allRepliesInThread = getAllRepliesFlat(posts, post.pubkey, post.timestamp)
+    const threadKey = `${post.pubkey}:${post.timestamp}`
+    const isExpanded = expandedReplyThreads.has(threadKey)
+    const replies = isExpanded
+      ? allRepliesInThread
+      : allRepliesInThread.filter(r => r._depth < UI_REPLY_COLLAPSE_DEPTH)
+    const hiddenByDepth = allRepliesInThread.length - replies.length
 
     // Find hidden replies - people who replied according to OP's reply_metadata but we don't follow
     const replyMetadata = posts.filter(e =>
@@ -394,8 +757,10 @@ export async function renderPosts(posts, refreshUI) {
       e.post_timestamp === post.timestamp
     )
 
-    // Filter to repliers we don't follow and haven't already seen
-    const visibleReplierPubkeys = new Set(replies.map(r => r.pubkey))
+    // Filter to repliers we don't follow and haven't already seen. Use the
+    // full thread (including depth-collapsed) so a replier who is rendered
+    // behind the "+N more" stub still counts as "already known".
+    const visibleReplierPubkeys = new Set(allRepliesInThread.map(r => r.pubkey))
     const hiddenRepliers = replyMetadata
       .map(m => m.replier)
       .filter(r => {
@@ -409,7 +774,6 @@ export async function renderPosts(posts, refreshUI) {
       .filter((r, i, arr) => arr.findIndex(x => x.pubkey === r.pubkey) === i)
 
     // Build hidden replies indicator HTML
-    const totalReplies = replies.length + hiddenRepliers.length
     const hiddenRepliesHtml = hiddenRepliers.length > 0 ? `
       <div class="hidden-replies-indicator">
         <span class="hidden-count">${hiddenRepliers.length} hidden ${hiddenRepliers.length === 1 ? 'reply' : 'replies'}</span>
@@ -436,8 +800,9 @@ export async function renderPosts(posts, refreshUI) {
       ${repostInfo.comment ? `<div class="repost-comment">${renderMarkdown(repostInfo.comment)}</div>` : ''}
     ` : ''
 
-    // Render replies inline
-    const repliesHtml = replies.length > 0 ? `
+    // Render replies inline. Render the wrapper if we have any visible
+    // replies OR a collapsed-deep stub to display.
+    const repliesHtml = (replies.length > 0 || hiddenByDepth > 0) ? `
       <div class="post-replies">
         ${replies.map(reply => {
           const replyAuthor = getDisplayName(reply.pubkey, state.identity, state.myProfile, state.peerProfiles)
@@ -445,7 +810,8 @@ export async function renderPosts(posts, refreshUI) {
           const hasReplyMedia = reply.media && reply.media.length > 0
           const replyCounts = getInteractionCounts(posts, reply.pubkey, reply.timestamp)
           const replyReposted = hasReposted(posts, myPubkey, reply.pubkey, reply.timestamp)
-          const replyLiked = hasLiked(posts, myPubkey, reply.pubkey, reply.timestamp)
+          const replyReactions = replyCounts.reactions || []
+          const replyMyReaction = getUserReaction(posts, myPubkey, reply.pubkey, reply.timestamp)
           const replySupporterManager = getSupporterManager()
           const replyIsSupporter = replySupporterManager?.isListed(reply.pubkey)
           const replySupporterBadge = replyIsSupporter ? '<span class="supporter-badge" title="Supporter"><span class="badge-icon">★</span>Supporter</span>' : ''
@@ -468,10 +834,7 @@ export async function renderPosts(posts, refreshUI) {
               <div class="reply-content">${renderMarkdown(reply.content || '')}</div>
               ${hasReplyMedia ? `<div class="reply-media" data-media-pubkey="${safePubkey}" data-media-ts="${safeTs}"></div>` : ''}
               <div class="reply-actions">
-                ${!isOwnReply ? `<button class="action-btn like-btn reply-like-btn ${replyLiked ? 'liked' : ''}" data-pubkey="${safePubkey}" data-timestamp="${safeTs}" title="Like">
-                  <span class="action-icon">${replyLiked ? '\u2764' : '\u2661'}</span>
-                  <span class="action-count">${replyCounts.likes || ''}</span>
-                </button>` : ''}
+                ${renderReactionCluster(replyReactions, replyMyReaction, reply.pubkey, reply.timestamp, { isOwn: isOwnReply, inReply: true })}
                 <button class="action-btn reply-repost-btn ${replyReposted ? 'reposted' : ''}" data-pubkey="${safePubkey}" data-timestamp="${safeTs}" title="Repost">
                   <span class="action-icon">\u21BB</span>
                   <span class="action-count">${replyCounts.reposts || ''}</span>
@@ -495,12 +858,25 @@ export async function renderPosts(posts, refreshUI) {
             </div>
           `
         }).join('')}
+        ${hiddenByDepth > 0 ? `
+          <div class="replies-collapsed-stub">
+            <button class="replies-expand-btn" type="button">
+              +${hiddenByDepth} more ${hiddenByDepth === 1 ? 'reply' : 'replies'}
+            </button>
+          </div>
+        ` : ''}
       </div>
     ` : ''
 
     const supporterManager = getSupporterManager()
     const isSupporter = supporterManager?.isListed(post.pubkey)
     const supporterBadge = isSupporter ? '<span class="supporter-badge" title="Supporter"><span class="badge-icon">★</span>Supporter</span>' : ''
+
+    // Content warning (shown above post body, blurs content until revealed).
+    // Strictly optional; only a non-empty, trimmed string under the cap is
+    // rendered. escapeHtml is mandatory — the label comes from peer input.
+    const rawCw = (typeof post.cw === 'string') ? post.cw.trim() : ''
+    const cwLabel = (rawCw && rawCw.length <= 200) ? rawCw : ''
 
     // Paywall rendering: locked vs unlocked
     const paywalled = isPaywalledPost(post)
@@ -562,14 +938,25 @@ export async function renderPosts(posts, refreshUI) {
               : ''}
         </div>
         <div class="post-body">
-          ${postBodyHtml}
-          ${postHasMedia ? `<div class="post-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''}
+          ${cwLabel ? `
+            <div class="cw-wrapper" data-pubkey="${safePk}" data-timestamp="${safeTs}">
+              <div class="cw-placeholder">
+                <span class="cw-icon">⚠</span>
+                <span class="cw-label">${escapeHtml(cwLabel)}</span>
+                <button class="cw-reveal-btn" type="button">Show content</button>
+              </div>
+              <div class="cw-content hidden">
+                ${postBodyHtml}
+                ${postHasMedia ? `<div class="post-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''}
+              </div>
+            </div>
+          ` : `
+            ${postBodyHtml}
+            ${postHasMedia ? `<div class="post-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''}
+          `}
         </div>
         <div class="post-actions">
-          ${!isOwnPost ? `<button class="action-btn like-btn ${liked ? 'liked' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}" title="Like">
-            <span class="action-icon">${liked ? '\u2764' : '\u2661'}</span>
-            <span class="action-count">${counts.likes || ''}</span>
-          </button>` : `<span class="action-placeholder"></span>`}
+          ${renderReactionCluster(postReactions, myReaction, post.pubkey, post.timestamp, { isOwn: isOwnPost })}
           <button class="action-btn repost-btn ${reposted ? 'reposted' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}" title="Repost">
             <span class="action-icon">\u21BB</span>
             <span class="action-count">${counts.reposts || ''}</span>
@@ -577,6 +964,9 @@ export async function renderPosts(posts, refreshUI) {
           <button class="action-btn reply-btn" data-pubkey="${safePk}" data-timestamp="${safeTs}" title="Reply">
             <span class="action-icon">\u{1F4AC}</span>
             <span class="action-count">${counts.replies || ''}</span>
+          </button>
+          <button class="action-btn bookmark-btn ${isBookmarked(post.pubkey, post.timestamp) ? 'bookmarked' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}" title="${isBookmarked(post.pubkey, post.timestamp) ? 'Remove bookmark' : 'Bookmark'}">
+            <span class="action-icon">${isBookmarked(post.pubkey, post.timestamp) ? '\u{1F516}' : '\u{1F4D1}'}</span>
           </button>
           <button class="action-btn tip-btn" data-pubkey="${safePk}" data-timestamp="${safeTs}" data-is-own="${isOwnPost}" title="Send tip">
             <svg class="action-icon monero-icon" viewBox="0 0 496 512" width="20" height="20"><path fill="currentColor" d="M352 384h108.4C417 455.9 338.1 504 248 504S79 455.9 35.6 384H144V256.2L248 361l104-105v128zM88 336V128l159.4 159.4L408 128v208h74.8c8.5-25.1 13.2-52 13.2-80C496 119 385 8 248 8S0 119 0 256c0 28 4.6 54.9 13.2 80H88z"/></svg>
@@ -621,6 +1011,86 @@ export async function renderPosts(posts, refreshUI) {
   `
   }
 
+  // Render a poll card. Tally is computed from the current timeline via
+  // tallyPollVotes, which runs verifyEventSignature per vote, dedupes by voter
+  // pubkey (latest wins, tiebreak by Hypercore _seq), and drops votes past
+  // poll.expires_at. Option labels are escaped here and in the result bars.
+  function renderPollCard(poll) {
+    const displayName = getDisplayName(poll.pubkey, state.identity, state.myProfile, state.peerProfiles)
+    const isOwnPoll = poll.pubkey === myPubkey
+    const safePk = escapeHtml(poll.pubkey || '')
+    const safeTs = escapeHtml(String(poll.timestamp || ''))
+    const expiresAt = Number(poll.expires_at)
+    const nowMs = Date.now()
+    const ended = !Number.isFinite(expiresAt) || nowMs >= expiresAt
+
+    const supporterManager = getSupporterManager()
+    const isSupporter = supporterManager?.isListed(poll.pubkey)
+    const supporterBadge = isSupporter ? '<span class="supporter-badge" title="Supporter"><span class="badge-icon">&#9733;</span>Supporter</span>' : ''
+
+    const { counts, total, voters } = tallyPollVotes(poll, posts, nowMs)
+    const myVoteIndex = myPubkey ? voters.get(myPubkey.toLowerCase()) : undefined
+    const hasVoted = typeof myVoteIndex === 'number'
+
+    // Render options. Showing the vote button is disabled once the poll has
+    // ended, after the viewer has voted, or for the author's own poll.
+    const canVote = !ended && !hasVoted && !isOwnPoll
+    const optionsHtml = poll.options.map((label, idx) => {
+      const votes = counts[idx] || 0
+      const pct = total > 0 ? Math.round((votes / total) * 100) : 0
+      const selected = hasVoted && myVoteIndex === idx ? ' poll-option-selected' : ''
+      const barHtml = (ended || hasVoted)
+        ? `<div class="poll-option-bar" style="width:${pct}%"></div>`
+        : ''
+      const voteBtnHtml = canVote
+        ? `<button class="poll-vote-btn" data-pubkey="${safePk}" data-timestamp="${safeTs}" data-option="${idx}">Vote</button>`
+        : ''
+      const countHtml = (ended || hasVoted)
+        ? `<span class="poll-option-count">${votes} &middot; ${pct}%</span>`
+        : ''
+      return `
+        <div class="poll-option${selected}">
+          ${barHtml}
+          <div class="poll-option-body">
+            <span class="poll-option-label">${escapeHtml(label)}</span>
+            ${countHtml}
+            ${voteBtnHtml}
+          </div>
+        </div>
+      `
+    }).join('')
+
+    const timeLeft = ended
+      ? 'Poll ended'
+      : `Ends ${formatTime(expiresAt)}`
+    const warningHtml = canVote
+      ? '<div class="poll-vote-warning">&#9888; Votes are public and signed &mdash; anyone can see your choice.</div>'
+      : ''
+    const question = poll.question || ''
+
+    return `
+      <div class="post-wrapper">
+        <div class="post poll-card" data-pubkey="${safePk}" data-timestamp="${safeTs}">
+          <div class="post-header">
+            ${getAvatarHtml(poll.pubkey, 'post')}
+            <span class="post-author" data-pubkey="${safePk}">${escapeHtml(displayName)}</span>${getOnlineDotHtml(poll.pubkey)}${supporterBadge}
+            <span class="post-time">${formatTime(poll.timestamp)}</span>
+            ${isOwnPoll ? `<button class="delete-btn" data-timestamp="${safeTs}" title="Delete poll">&#128465;</button>` : ''}
+          </div>
+          <div class="post-body">
+            <div class="poll-question">${escapeHtml(question)}</div>
+            <div class="poll-options">${optionsHtml}</div>
+            <div class="poll-meta">
+              <span class="poll-total">${total} vote${total === 1 ? '' : 's'}</span>
+              <span class="poll-time-left">${escapeHtml(timeLeft)}</span>
+            </div>
+            ${warningHtml}
+          </div>
+        </div>
+      </div>
+    `
+  }
+
   // Render a top-level "my reply" card (only appears when "My posts" is toggled on)
   function renderMyReplyCard(reply) {
     const hasReplyMedia = reply.media && reply.media.length > 0
@@ -658,6 +1128,8 @@ export async function renderPosts(posts, refreshUI) {
       })
     } else if (item.type === 'myreply') {
       return renderMyReplyCard(item.reply)
+    } else if (item.type === 'poll') {
+      return renderPollCard(item.poll)
     } else {
       return renderPostWithReplies(item.post, idx)
     }
@@ -694,6 +1166,31 @@ export async function renderPosts(posts, refreshUI) {
       if (onAuthorClickCallback) {
         onAuthorClickCallback(pubkey, state.currentTimeline)
       }
+    })
+  })
+
+  // Content-warning reveal handlers
+  dom.postsEl.querySelectorAll('.cw-reveal-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const wrapper = btn.closest('.cw-wrapper')
+      if (!wrapper) return
+      wrapper.classList.add('cw-revealed')
+      const content = wrapper.querySelector('.cw-content')
+      if (content) content.classList.remove('hidden')
+    })
+  })
+
+  // Reply-collapse expand handlers
+  dom.postsEl.querySelectorAll('.replies-expand-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const postEl = btn.closest('.post')
+      if (!postEl) return
+      const pk = postEl.dataset.pubkey
+      const ts = postEl.dataset.timestamp
+      if (pk && ts) expandedReplyThreads.add(`${pk}:${ts}`)
+      renderPosts(posts, refreshUI)
     })
   })
 
@@ -736,28 +1233,44 @@ export async function renderPosts(posts, refreshUI) {
     })
   })
 
-  // Add like handlers
-  dom.postsEl.querySelectorAll('.like-btn').forEach(btn => {
+  // Poll vote handlers. Votes are signed by feed.append at send time so the
+  // timestamp used for the expires_at check is the feed-signed one, not
+  // user-supplied. Aggregator enforces dedupe + bounds + signature checks at
+  // render.
+  dom.postsEl.querySelectorAll('.poll-vote-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation()
-      const toPubkey = btn.dataset.pubkey
-      const postTimestamp = parseInt(btn.dataset.timestamp)
-
-      // Check if already liked
-      if (hasLiked(state.currentTimeline, myPubkey, toPubkey, postTimestamp)) {
-        return // Already liked, can't unlike (append-only)
-      }
-
+      const authorPubkey = btn.dataset.pubkey
+      const pollTimestamp = parseInt(btn.dataset.timestamp, 10)
+      const optionIndex = parseInt(btn.dataset.option, 10)
+      const poll = state.currentTimeline.find(p =>
+        p.type === 'poll' && p.pubkey === authorPubkey && p.timestamp === pollTimestamp
+      )
+      if (!poll || !validatePollEvent(poll)) return
+      if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= poll.options.length) return
+      if (Date.now() >= Number(poll.expires_at)) return
+      if (authorPubkey === myPubkey) return
+      const ok = confirm(
+        'Votes are public and signed by your feed. Anyone replicating your feed can see your choice.\n\nSubmit your vote?'
+      )
+      if (!ok) return
       btn.disabled = true
       try {
-        await state.feed.append(createLikeEvent({ toPubkey, postTimestamp }))
+        await state.feed.append(createPollVoteEvent({
+          pollAuthorPubkey: authorPubkey,
+          pollTimestamp,
+          optionIndex
+        }))
         await refreshUI()
       } catch (err) {
-        alert('Error liking: ' + err.message)
+        alert('Error submitting vote: ' + err.message)
         btn.disabled = false
       }
     })
   })
+
+  // Add reaction handlers (cluster: chips + "+" picker, replaces likes)
+  wireReactionHandlers(dom.postsEl, state.currentTimeline, myPubkey, refreshUI)
 
   // Add repost handlers - show inline repost form
   dom.postsEl.querySelectorAll('.repost-btn').forEach(btn => {
@@ -1062,6 +1575,28 @@ export async function renderPosts(posts, refreshUI) {
     }
   })
 
+  // Add bookmark handlers (toggle)
+  dom.postsEl.querySelectorAll('.bookmark-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const pubkey = btn.dataset.pubkey
+      const timestamp = parseInt(btn.dataset.timestamp, 10)
+      if (!pubkey || !Number.isFinite(timestamp)) return
+      btn.disabled = true
+      try {
+        if (isBookmarked(pubkey, timestamp)) {
+          await removeBookmark(state.feed, state.identity, pubkey, timestamp)
+        } else {
+          await addBookmark(state.feed, state.identity, pubkey, timestamp)
+        }
+        await refreshUI()
+      } catch (err) {
+        alert('Error bookmarking: ' + err.message)
+        btn.disabled = false
+      }
+    })
+  })
+
   // Add tip handlers
   dom.postsEl.querySelectorAll('.tip-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -1237,8 +1772,10 @@ export async function renderPosts(posts, refreshUI) {
     }
 
     if (post && mediaList && mediaList.length > 0 && state.media) {
-      for (const m of mediaList) {
-        await renderMediaInto(mediaContainer, post.pubkey, m)
+      try {
+        await renderMediaCollection(mediaContainer, post.pubkey, mediaList)
+      } catch (err) {
+        console.error('Error rendering post media collection:', err)
       }
     }
   }
@@ -1252,12 +1789,10 @@ export async function renderPosts(posts, refreshUI) {
     // Find the reply with this pubkey+timestamp
     const reply = posts.find(p => p.type === 'reply' && p.pubkey === pubkey && p.timestamp === ts)
     if (reply && reply.media && reply.media.length > 0 && state.media) {
-      for (const m of reply.media) {
-        try {
-          await renderMediaInto(mediaContainer, reply.pubkey, m)
-        } catch (err) {
-          console.error('Error loading reply media:', err)
-        }
+      try {
+        await renderMediaCollection(mediaContainer, reply.pubkey, reply.media)
+      } catch (err) {
+        console.error('Error rendering reply media collection:', err)
       }
     }
   }
@@ -1277,7 +1812,7 @@ export function setRefreshUICallback(callback) {
 export async function showThreadInCenter(rootPubkey, rootTimestamp) {
   centerViewActive = true
   const timeline = state.currentTimeline
-  const { buildThread, getInteractionCounts, hasLiked, hasReposted, createReplyEvent, createLikeEvent, createRepostEvent } = await import('../../lib/events.js')
+  const { buildThread, getInteractionCounts, hasReposted, createReplyEvent, createRepostEvent, createReactionEvent, getUserReaction, isValidReactionEmoji } = await import('../../lib/events.js')
 
   const thread = buildThread(timeline, rootPubkey, rootTimestamp)
   if (!thread) {
@@ -1304,7 +1839,8 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
   function renderThreadPost(post, isRoot = false) {
     const displayName = getDisplayName(post.pubkey, state.identity, state.myProfile, state.peerProfiles)
     const counts = getInteractionCounts(timeline, post.pubkey, post.timestamp)
-    const liked = hasLiked(timeline, myPubkey, post.pubkey, post.timestamp)
+    const threadReactions = counts.reactions || []
+    const threadMyReaction = getUserReaction(timeline, myPubkey, post.pubkey, post.timestamp)
     const reposted = hasReposted(timeline, myPubkey, post.pubkey, post.timestamp)
     const isOwnPost = post.pubkey === myPubkey
     const hasMedia = post.media && post.media.length > 0
@@ -1314,6 +1850,27 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
     const safePk = escapeHtml(post.pubkey || '')
     const safeTs = escapeHtml(String(post.timestamp || ''))
 
+    const rawCw = (typeof post.cw === 'string') ? post.cw.trim() : ''
+    const cwLabel = (rawCw && rawCw.length <= 200) ? rawCw : ''
+    const threadContentHtml = `<div class="thread-post-content">${renderMarkdown(post.content || '')}</div>`
+    const threadMediaHtml = hasMedia ? `<div class="thread-post-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''
+    const threadBodyHtml = cwLabel ? `
+      <div class="cw-wrapper" data-pubkey="${safePk}" data-timestamp="${safeTs}">
+        <div class="cw-placeholder">
+          <span class="cw-icon">⚠</span>
+          <span class="cw-label">${escapeHtml(cwLabel)}</span>
+          <button class="cw-reveal-btn" type="button">Show content</button>
+        </div>
+        <div class="cw-content hidden">
+          ${threadContentHtml}
+          ${threadMediaHtml}
+        </div>
+      </div>
+    ` : `
+      ${threadContentHtml}
+      ${threadMediaHtml}
+    `
+
     return `
       <div class="thread-post ${isRoot ? 'thread-root' : 'thread-reply'}" data-pubkey="${safePk}" data-timestamp="${safeTs}">
         <div class="thread-post-header">
@@ -1321,13 +1878,9 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
           <span class="thread-post-author">${escapeHtml(displayName)}</span>${getOnlineDotHtml(post.pubkey)}${threadSupporterBadge}
           <span class="thread-post-time">${formatTime(post.timestamp)}</span>
         </div>
-        <div class="thread-post-content">${renderMarkdown(post.content || '')}</div>
-        ${hasMedia ? `<div class="thread-post-media" data-media-pubkey="${safePk}" data-media-ts="${safeTs}"></div>` : ''}
+        ${threadBodyHtml}
         <div class="thread-post-actions">
-          ${!isOwnPost ? `<button class="action-btn center-like-btn ${liked ? 'liked' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}">
-            <span class="action-icon">${liked ? '\u2764' : '\u2661'}</span>
-            <span class="action-count">${counts.likes || ''}</span>
-          </button>` : '<span class="action-placeholder"></span>'}
+          ${renderReactionCluster(threadReactions, threadMyReaction, post.pubkey, post.timestamp, { isOwn: isOwnPost })}
           <button class="action-btn center-repost-btn ${reposted ? 'reposted' : ''}" data-pubkey="${safePk}" data-timestamp="${safeTs}">
             <span class="action-icon">\u21BB</span>
             <span class="action-count">${counts.reposts || ''}</span>
@@ -1385,25 +1938,26 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
     })
   }
 
-  // Like handlers
-  dom.postsEl.querySelectorAll('.center-like-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const toPubkey = btn.dataset.pubkey
-      const postTimestamp = parseInt(btn.dataset.timestamp)
-      if (hasLiked(timeline, myPubkey, toPubkey, postTimestamp)) return
-      btn.disabled = true
-      try {
-        await state.feed.append(createLikeEvent({ toPubkey, postTimestamp }))
-        if (refreshUICallback) {
-          await refreshUICallback()
-          await showThreadInCenter(rootPubkey, rootTimestamp)
-        }
-      } catch (err) {
-        alert('Error: ' + err.message)
-        btn.disabled = false
-      }
+  // Content-warning reveal handlers (thread view)
+  dom.postsEl.querySelectorAll('.cw-reveal-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const wrapper = btn.closest('.cw-wrapper')
+      if (!wrapper) return
+      wrapper.classList.add('cw-revealed')
+      const content = wrapper.querySelector('.cw-content')
+      if (content) content.classList.remove('hidden')
     })
   })
+
+  // Reaction handlers (cluster-style, replaces likes in thread center view)
+  const threadRefresh = async () => {
+    if (refreshUICallback) {
+      await refreshUICallback()
+      await showThreadInCenter(rootPubkey, rootTimestamp)
+    }
+  }
+  wireReactionHandlers(dom.postsEl, timeline, myPubkey, threadRefresh)
 
   // Repost handlers
   dom.postsEl.querySelectorAll('.center-repost-btn').forEach(btn => {
@@ -1503,8 +2057,10 @@ export async function showThreadInCenter(rootPubkey, rootTimestamp) {
     const ts = parseInt(mediaContainer.dataset.mediaTs)
     const post = timeline.find(p => (p.type === 'post' || p.type === 'reply') && p.pubkey === pubkey && p.timestamp === ts)
     if (post && post.media && post.media.length > 0 && state.media) {
-      for (const m of post.media) {
-        await renderMediaInto(mediaContainer, post.pubkey, m)
+      try {
+        await renderMediaCollection(mediaContainer, post.pubkey, post.media)
+      } catch (err) {
+        console.error('Error rendering thread media collection:', err)
       }
     }
   }
