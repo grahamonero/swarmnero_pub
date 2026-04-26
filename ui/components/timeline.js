@@ -20,8 +20,10 @@ import {
   getReplies,
   getAllRepliesFlat,
   tallyPollVotes,
-  validatePollEvent
+  validatePollEvent,
+  validateArticleEvent
 } from '../../lib/events.js'
+import { showArticleInCenter } from './article-view.js'
 import { showTipModal } from './tip.js'
 import { getSupporterManager } from '../../lib/supporter-manager.js'
 import { showFollowingModal, showFollowersModal, getFollowingForPubkey, getFollowersCount } from './panel.js'
@@ -408,6 +410,18 @@ const expandedReplyThreads = new Set()
 let centerViewActive = false
 
 /**
+ * External center-view holders (article-view.js, etc.) call this to mark
+ * the center column busy with a custom panel so renderPosts won't overwrite.
+ */
+export function setCenterViewActive(active) {
+  centerViewActive = !!active
+}
+
+export function getRefreshUICallback() {
+  return refreshUICallback
+}
+
+/**
  * Show a toast notification in the upper right corner
  */
 export function showToast(title, message, type = 'success') {
@@ -489,7 +503,7 @@ export function updatePostCount(timeline) {
  * or reply. Every emoji rendered here is passed through escapeHtml; ingest
  * validation drops invalid shapes but old events on disk could bypass it.
  */
-function renderReactionCluster(reactions, myReaction, pubkey, timestamp, { isOwn, inReply = false } = {}) {
+export function renderReactionCluster(reactions, myReaction, pubkey, timestamp, { isOwn, inReply = false } = {}) {
   const safePk = escapeHtml(pubkey || '')
   const safeTs = escapeHtml(String(timestamp || ''))
   const chips = reactions.map(r => {
@@ -519,7 +533,7 @@ function renderReactionCluster(reactions, myReaction, pubkey, timestamp, { isOwn
  * Wire click handlers for reaction chips, "+" buttons, and per-post pickers.
  * Called after postsEl innerHTML is replaced.
  */
-function wireReactionHandlers(containerEl, timeline, myPubkey, refreshUI) {
+export function wireReactionHandlers(containerEl, timeline, myPubkey, refreshUI) {
   const toggleReaction = async (toPubkey, postTimestamp, emoji) => {
     if (!isValidReactionEmoji(emoji)) return
     const current = getUserReaction(timeline, myPubkey, toPubkey, postTimestamp)
@@ -640,10 +654,20 @@ export async function renderPosts(posts, refreshUI) {
     validatePollEvent(p)
   )
 
+  // Get all article events (exclude deleted ones, validate structure).
+  // validateArticleEvent enforces caps + cover-shape; ingest already verified
+  // signatures. Belt-and-braces: re-validate here before render.
+  let articleEvents = posts.filter(p =>
+    p.type === 'article' &&
+    !deletedKeys.has(`${p.pubkey}:${p.timestamp}`) &&
+    validateArticleEvent(p)
+  )
+
   if (filterMyOnly) {
     postEvents = postEvents.filter(p => p.pubkey === myPubkey)
     repostEvents = repostEvents.filter(p => p.pubkey === myPubkey)
     pollEvents = pollEvents.filter(p => p.pubkey === myPubkey)
+    articleEvents = articleEvents.filter(p => p.pubkey === myPubkey)
   }
 
   // Build timeline items: original posts + reposts + polls (sorted by time)
@@ -657,6 +681,11 @@ export async function renderPosts(posts, refreshUI) {
   // Add polls
   for (const poll of pollEvents) {
     timelineItems.push({ type: 'poll', poll, timestamp: poll.timestamp })
+  }
+
+  // Add articles (compact card on the timeline; click opens reading mode)
+  for (const article of articleEvents) {
+    timelineItems.push({ type: 'article', article, timestamp: article.timestamp })
   }
 
   // Add reposts (find original post and wrap it)
@@ -1091,6 +1120,61 @@ export async function renderPosts(posts, refreshUI) {
     `
   }
 
+  // Compact article card for the timeline. Title + summary + cover thumb.
+  // Clicking the card opens reading mode in the center column. All
+  // user-controlled fields go through escapeHtml — never rendered as
+  // markdown here (markdown only happens in reading mode where the sanitizer
+  // owns the contract).
+  function renderArticleCard(article) {
+    const displayName = getDisplayName(article.pubkey, state.identity, state.myProfile, state.peerProfiles)
+    const isOwnArticle = article.pubkey === myPubkey
+    // PHASE 2A: every interpolation below MUST go through escapeHtml.
+    const safePk = escapeHtml(article.pubkey || '')
+    const safeTs = escapeHtml(String(article.timestamp || ''))
+    const safeTitle = escapeHtml(article.title || '')
+    const safeSummary = escapeHtml(article.summary || '')
+    const safeCw = article.cw ? escapeHtml(article.cw) : ''
+
+    const supporterManager = getSupporterManager()
+    const isSupporter = supporterManager?.isListed(article.pubkey)
+    const supporterBadge = isSupporter ? '<span class="supporter-badge" title="Supporter"><span class="badge-icon">&#9733;</span>Supporter</span>' : ''
+
+    const tagsHtml = Array.isArray(article.tags) && article.tags.length > 0
+      ? `<div class="article-card-tags">${article.tags.slice(0, 5).map(t => `<span class="article-tag">#${escapeHtml(t)}</span>`).join(' ')}</div>`
+      : ''
+
+    // Cover image is loaded asynchronously via getImageUrl, like post media.
+    const hasCover = !!(article.cover && article.cover.driveKey && article.cover.path)
+    const coverHtml = hasCover
+      ? `<div class="article-card-cover" data-cover-pubkey="${safePk}" data-cover-ts="${safeTs}"></div>`
+      : ''
+
+    const cwBadge = safeCw ? `<span class="article-card-cw" title="Content warning">&#9888; ${safeCw}</span>` : ''
+
+    return `
+      <div class="post-wrapper">
+        <div class="post article-card" data-pubkey="${safePk}" data-timestamp="${safeTs}">
+          <div class="post-header">
+            ${getAvatarHtml(article.pubkey, 'post')}
+            <span class="post-author" data-pubkey="${safePk}">${escapeHtml(displayName)}</span>${getOnlineDotHtml(article.pubkey)}${supporterBadge}
+            <span class="post-time">${formatTime(article.timestamp)}</span>
+            ${isOwnArticle ? `<button class="delete-btn" data-timestamp="${safeTs}" title="Delete article">&#128465;</button>` : ''}
+          </div>
+          <div class="article-card-body">
+            ${coverHtml}
+            <div class="article-card-text">
+              <div class="article-card-title">${safeTitle}</div>
+              ${safeSummary ? `<div class="article-card-summary">${safeSummary}</div>` : ''}
+              ${cwBadge}
+              ${tagsHtml}
+              <div class="article-card-readmore">Read article &rarr;</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `
+  }
+
   // Render a top-level "my reply" card (only appears when "My posts" is toggled on)
   function renderMyReplyCard(reply) {
     const hasReplyMedia = reply.media && reply.media.length > 0
@@ -1130,6 +1214,8 @@ export async function renderPosts(posts, refreshUI) {
       return renderMyReplyCard(item.reply)
     } else if (item.type === 'poll') {
       return renderPollCard(item.poll)
+    } else if (item.type === 'article') {
+      return renderArticleCard(item.article)
     } else {
       return renderPostWithReplies(item.post, idx)
     }
@@ -1683,10 +1769,12 @@ export async function renderPosts(posts, refreshUI) {
     })
   })
 
-  // Add post click handlers - open thread view. Polls are standalone events
-  // with their own vote affordances, so clicking a poll card never opens a
-  // thread (buildThread doesn't index polls and would 'Post not found').
-  dom.postsEl.querySelectorAll('.post:not(.poll-card)').forEach(el => {
+  // Add post click handlers - open thread view. Polls and articles are
+  // standalone events with their own dedicated affordances:
+  //   - polls: vote buttons (no thread)
+  //   - articles: reading mode in the center column (different render path)
+  // Both are excluded here.
+  dom.postsEl.querySelectorAll('.post:not(.poll-card):not(.article-card)').forEach(el => {
     el.addEventListener('click', (e) => {
       // Don't trigger if clicking on author, buttons, links, reply form, or hidden replies indicator
       if (e.target.closest('.post-author, .action-btn, .delete-btn, a, .inline-reply-form, .hidden-replies-indicator')) return
@@ -1695,6 +1783,19 @@ export async function renderPosts(posts, refreshUI) {
       if (onThreadClickCallback) {
         onThreadClickCallback(pubkey, timestamp, false)
       }
+    })
+  })
+
+  // Article cards open reading mode in the center column. Render-time
+  // signature verification + cap re-validation happens inside
+  // showArticleInCenter — never trust the click-source params.
+  dom.postsEl.querySelectorAll('.article-card').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.post-author, .action-btn, .delete-btn, a')) return
+      const pubkey = el.dataset.pubkey
+      const timestamp = parseInt(el.dataset.timestamp)
+      if (!pubkey || !Number.isFinite(timestamp)) return
+      showArticleInCenter(pubkey, timestamp)
     })
   })
 
@@ -1779,6 +1880,29 @@ export async function renderPosts(posts, refreshUI) {
       } catch (err) {
         console.error('Error rendering post media collection:', err)
       }
+    }
+  }
+
+  // Load article cover thumbnails. Each article-card with a cover has a
+  // data-cover-pubkey/data-cover-ts container we now resolve via
+  // state.media.getImageUrl.
+  const articleCoverContainers = dom.postsEl.querySelectorAll('.article-card-cover[data-cover-pubkey]')
+  for (const coverEl of articleCoverContainers) {
+    const pubkey = coverEl.dataset.coverPubkey
+    const ts = parseInt(coverEl.dataset.coverTs)
+    const article = articleEvents.find(a => a.pubkey === pubkey && a.timestamp === ts)
+    if (!article || !article.cover || !state.media) continue
+    try {
+      const url = await state.media.getImageUrl(article.cover.driveKey, article.cover.path, { noSizeCap: false })
+      if (!url) continue
+      // Sanitize: only emit a known-safe blob:/data: URL we just produced.
+      const img = document.createElement('img')
+      img.alt = ''
+      img.src = url
+      coverEl.innerHTML = ''
+      coverEl.appendChild(img)
+    } catch (err) {
+      console.warn('[Articles] cover thumb load failed:', err.message)
     }
   }
 
