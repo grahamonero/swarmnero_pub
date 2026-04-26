@@ -368,6 +368,44 @@ positiveTest('paragraph break', 'a\n\nb', '<p>a</p>')
 // Image with valid drive ref renders
 positiveTest('image valid drive ref', '![cat](' + 'a'.repeat(64) + '/images/cat.jpg)', '<img alt="cat" src="swarmnero://')
 
+// Post-agent regression locks (Phase 2A v2 fixes)
+
+// MEDIUM #1: nested-link emission. Inner link must NOT produce a second <a>.
+test(
+  'nested-link suppression',
+  '[outer [inner](https://a.com) more](https://b.com)',
+  { mustInclude: ['href="https://b.com"'], mustNotInclude: ['href="https://a.com"'] }
+)
+;(function nestedLinkSingleAnchorOnly() {
+  const out = renderArticleMarkdown('[outer [inner](https://a.com) more](https://b.com)')
+  const aOpens = (out.match(/<a /g) || []).length
+  if (aOpens > 1) {
+    fail++
+    failures.push({
+      name: 'nested-link single-anchor-only',
+      input: '[outer [inner](https://a.com) more](https://b.com)',
+      output: out,
+      violations: [`expected 1 <a> open tag, got ${aOpens}`]
+    })
+  } else {
+    pass++
+  }
+})()
+
+// LOW #1: userinfo URL must be rejected (phishing display-vs-real-host trick).
+test(
+  'userinfo URL rejected',
+  '[click](https://safe.com@evil.com/path)',
+  { mustNotInclude: ['<a '] }
+)
+
+// LOW #2: balanced parens inside the URL parse as URL.
+positiveTest(
+  'paren-balanced URL',
+  '[wiki](https://en.wikipedia.org/wiki/Foo_(bar))',
+  'href="https://en.wikipedia.org/wiki/Foo_(bar)"'
+)
+
 // ============================================================================
 // Report
 // ============================================================================

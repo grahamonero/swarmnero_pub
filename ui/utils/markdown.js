@@ -91,6 +91,8 @@ function validateLinkUrl(raw) {
     return null
   }
   if (!ALLOWED_LINK_SCHEMES.includes(parsed.protocol)) return null
+  // Reject userinfo — phishing display-vs-real-host trick (`https://safe.com@evil.com`)
+  if (parsed.username || parsed.password) return null
   return url
 }
 
@@ -139,7 +141,9 @@ function imageDriveRefToSrc(driveKey, path) {
  * doesn't match a known pattern is appended as escapeHtml'd text. We never
  * pass the raw line through any HTML emit point.
  */
-function renderInline(raw) {
+function renderInline(raw, opts = {}) {
+  // opts.inLink: when true we are recursing through a link's display text.
+  // Suppresses further link parsing so we never emit nested <a><a></a></a>.
   let out = ''
   let i = 0
   const n = raw.length
@@ -172,8 +176,8 @@ function renderInline(raw) {
       }
     }
 
-    // Link: [text](url)
-    if (ch === '[') {
+    // Link: [text](url) — suppressed inside another link's text
+    if (ch === '[' && !opts.inLink) {
       const consumed = tryParseLink(raw, i)
       if (consumed) {
         out += consumed.html
@@ -187,7 +191,7 @@ function renderInline(raw) {
       const close = findClosingDelim(raw, i + 2, '**')
       if (close > i + 2) {
         const body = raw.slice(i + 2, close)
-        out += `<strong>${renderInline(body)}</strong>`
+        out += `<strong>${renderInline(body, opts)}</strong>`
         i = close + 2
         continue
       }
@@ -198,7 +202,7 @@ function renderInline(raw) {
       const close = findClosingDelim(raw, i + 2, '~~')
       if (close > i + 2) {
         const body = raw.slice(i + 2, close)
-        out += `<del>${renderInline(body)}</del>`
+        out += `<del>${renderInline(body, opts)}</del>`
         i = close + 2
         continue
       }
@@ -213,7 +217,7 @@ function renderInline(raw) {
           const body = raw.slice(i + 1, close)
           // Body must not contain a newline or asterisk
           if (body.indexOf('\n') === -1 && body.indexOf('*') === -1 && body.length > 0) {
-            out += `<em>${renderInline(body)}</em>`
+            out += `<em>${renderInline(body, opts)}</em>`
             i = close + 1
             continue
           }
@@ -295,8 +299,19 @@ function tryParseLink(raw, i) {
   if (raw[j] !== ']' || raw[j + 1] !== '(') return null
   let k = j + 2
   let url = ''
-  while (k < raw.length && raw[k] !== ')' && raw[k] !== '\n') {
-    url += raw[k]
+  // Allow balanced (...) inside the URL so common patterns like
+  // https://en.wikipedia.org/wiki/Foo_(bar) parse correctly. Outer ')' that
+  // would drop depth below 0 closes the link.
+  let parenDepth = 0
+  while (k < raw.length && raw[k] !== '\n') {
+    const c = raw[k]
+    if (c === '(') {
+      parenDepth++
+    } else if (c === ')') {
+      if (parenDepth === 0) break
+      parenDepth--
+    }
+    url += c
     k++
   }
   if (raw[k] !== ')') return null
@@ -305,7 +320,7 @@ function tryParseLink(raw, i) {
   if (!safeUrl) return null
 
   const hrefAttr = escapeHtml(safeUrl)
-  const innerHtml = renderInline(text)
+  const innerHtml = renderInline(text, { inLink: true })
   return {
     html: `<a href="${hrefAttr}" rel="noopener noreferrer" target="_blank">${innerHtml}</a>`,
     end: k + 1
