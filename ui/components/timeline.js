@@ -5,7 +5,7 @@
 import { state, dom } from '../state.js'
 import { escapeHtml, wrapSelection, insertAtCursor, safeAvatarUrl, safeWebsiteUrl } from '../utils/dom.js'
 import { initEmojiPicker, emojis as EMOJI_PICKER_LIST } from '../utils/emoji.js'
-import { formatTime, getDisplayName, renderMarkdown, formatFileSize, getOnlineDotHtml } from '../utils/format.js'
+import { formatTime, formatTimeUntil, getDisplayName, renderMarkdown, formatFileSize, getOnlineDotHtml } from '../utils/format.js'
 import {
   createDeleteEvent,
   createReactionEvent,
@@ -1062,7 +1062,7 @@ export async function renderPosts(posts, refreshUI) {
 
     const timeLeft = ended
       ? 'Poll ended'
-      : `Ends ${formatTime(expiresAt)}`
+      : `Ends ${formatTimeUntil(expiresAt)}`
     const warningHtml = canVote
       ? '<div class="poll-vote-warning">&#9888; Votes are public and signed &mdash; anyone can see your choice.</div>'
       : ''
@@ -1683,8 +1683,10 @@ export async function renderPosts(posts, refreshUI) {
     })
   })
 
-  // Add post click handlers - open thread view
-  dom.postsEl.querySelectorAll('.post').forEach(el => {
+  // Add post click handlers - open thread view. Polls are standalone events
+  // with their own vote affordances, so clicking a poll card never opens a
+  // thread (buildThread doesn't index polls and would 'Post not found').
+  dom.postsEl.querySelectorAll('.post:not(.poll-card)').forEach(el => {
     el.addEventListener('click', (e) => {
       // Don't trigger if clicking on author, buttons, links, reply form, or hidden replies indicator
       if (e.target.closest('.post-author, .action-btn, .delete-btn, a, .inline-reply-form, .hidden-replies-indicator')) return

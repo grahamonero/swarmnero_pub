@@ -19,6 +19,17 @@ export function formatTime(ts) {
   return date.toLocaleDateString()
 }
 
+export function formatTimeUntil(ts) {
+  const target = new Date(ts)
+  const diff = target - new Date()
+  if (!Number.isFinite(diff) || diff <= 0) return 'soon'
+  if (diff < 60000) return 'in <1m'
+  if (diff < 3600000) return `in ${Math.floor(diff / 60000)}m`
+  if (diff < 86400000) return `in ${Math.floor(diff / 3600000)}h`
+  if (diff < 86400000 * 30) return `in ${Math.floor(diff / 86400000)}d`
+  return `on ${target.toLocaleDateString()}`
+}
+
 /**
  * Get display name for a pubkey
  */
