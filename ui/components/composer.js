@@ -5,12 +5,27 @@
 import { state, dom } from '../state.js'
 import { wrapSelection, insertAtCursor } from '../utils/dom.js'
 import { initEmojiPicker, toggleEmojiPicker } from '../utils/emoji.js'
-import { createPostEvent, createPollEvent, MAX_MEDIA_PER_POST, MAX_CW_LENGTH, POLL_MAX_OPTIONS, POLL_MAX_OPTION_LEN } from '../../lib/events.js'
+import {
+  createPostEvent,
+  createPollEvent,
+  createArticleEvent,
+  MAX_MEDIA_PER_POST,
+  MAX_CW_LENGTH,
+  POLL_MAX_OPTIONS,
+  POLL_MAX_OPTION_LEN,
+  ARTICLE_MAX_TITLE,
+  ARTICLE_MAX_SUMMARY,
+  ARTICLE_MAX_BODY
+} from '../../lib/events.js'
 import * as wallet from '../../lib/wallet.js'
 import { extractHashtags } from '../../lib/tag-extractor.js'
 import { createPaywalledPost, persistContentKey, cacheUnlockedContent } from '../../lib/paywall.js'
+import { renderArticleMarkdown } from '../utils/markdown.js'
 import { pushPanel } from './panel.js'
 import { schedulePublicSiteRebuild } from '../../app.js'
+
+// Article-mode pending cover image (single File). Uploaded at publish time.
+let expPendingArticleCover = null
 
 // Expanded composer pending media/files
 let expPendingMedia = []
@@ -121,6 +136,29 @@ function clearExpandedComposer() {
   if (pollDuration) pollDuration.value = '86400000'
   resetPollOptions()
 
+  // Reset article fields
+  const articleToggle = document.getElementById('expArticleToggle')
+  const articleFields = document.getElementById('expArticleFields')
+  const articleTitle = document.getElementById('expArticleTitle')
+  const articleSummary = document.getElementById('expArticleSummary')
+  const articleTitleCount = document.getElementById('expArticleTitleCount')
+  const articleSummaryCount = document.getElementById('expArticleSummaryCount')
+  const articleCoverPreview = document.getElementById('expArticleCoverPreview')
+  const articlePreview = document.getElementById('expArticlePreview')
+  if (articleToggle) articleToggle.checked = false
+  if (articleFields) articleFields.classList.add('hidden')
+  if (articleTitle) articleTitle.value = ''
+  if (articleSummary) articleSummary.value = ''
+  if (articleTitleCount) articleTitleCount.textContent = '0'
+  if (articleSummaryCount) articleSummaryCount.textContent = '0'
+  if (articleCoverPreview) articleCoverPreview.innerHTML = ''
+  if (articlePreview) {
+    articlePreview.classList.add('hidden')
+    articlePreview.innerHTML = ''
+  }
+  expPendingArticleCover = null
+  if (dom.expandedComposer) dom.expandedComposer.classList.remove('article-mode')
+
   // Hide metadata warning (shown only when video/file is pending)
   document.getElementById('metadataWarningHint')?.classList.add('hidden')
 }
@@ -179,6 +217,13 @@ async function saveDraftNow({ fromAutosave = false } = {}) {
       console.warn('[Composer] draft attachment read failed:', err.message)
     }
   }
+  // Article-mode discriminator: when the toggle is on, persist title/summary
+  // alongside the body so a draft round-trip restores the full article.
+  const articleToggle = document.getElementById('expArticleToggle')
+  const articleEnabled = !!articleToggle?.checked
+  const articleTitle = (document.getElementById('expArticleTitle')?.value) || ''
+  const articleSummary = (document.getElementById('expArticleSummary')?.value) || ''
+
   const draft = state.drafts.upsert({
     id: activeDraftId,
     content,
@@ -188,7 +233,9 @@ async function saveDraftNow({ fromAutosave = false } = {}) {
       enabled: paywallEnabled,
       price: priceInput?.value || '',
       preview: previewInput?.value || ''
-    }
+    },
+    mode: articleEnabled ? 'article' : 'post',
+    article: articleEnabled ? { title: articleTitle, summary: articleSummary } : null
   })
   activeDraftId = draft.id
   renderSavedDraftsList()
@@ -237,6 +284,24 @@ async function loadDraft(draftId) {
     if (fields) fields.classList.remove('hidden')
     if (priceInput) priceInput.value = draft.paywall.price || ''
     if (previewInput) previewInput.value = draft.paywall.preview || ''
+  }
+  // Phase 2A: restore article-mode draft fields. Note that the cover image is
+  // NOT persisted in drafts (it's an attachment that must be re-selected on
+  // restore — tracked as a follow-up).
+  if (draft.mode === 'article' && draft.article) {
+    const articleToggle = document.getElementById('expArticleToggle')
+    const articleFields = document.getElementById('expArticleFields')
+    const articleTitle = document.getElementById('expArticleTitle')
+    const articleSummary = document.getElementById('expArticleSummary')
+    const articleTitleCount = document.getElementById('expArticleTitleCount')
+    const articleSummaryCount = document.getElementById('expArticleSummaryCount')
+    if (articleToggle) articleToggle.checked = true
+    if (articleFields) articleFields.classList.remove('hidden')
+    if (articleTitle) articleTitle.value = draft.article.title || ''
+    if (articleSummary) articleSummary.value = draft.article.summary || ''
+    if (articleTitleCount) articleTitleCount.textContent = (draft.article.title || '').length
+    if (articleSummaryCount) articleSummaryCount.textContent = (draft.article.summary || '').length
+    if (dom.expandedComposer) dom.expandedComposer.classList.add('article-mode')
   }
   updateExpCharCount()
 }
@@ -397,10 +462,22 @@ function updateExpCharCount() {
     expPendingMedia.length === 0 && expPendingFiles.length === 0
   const pollOn = !!document.getElementById('expPollToggle')?.checked
   const pollQuestionFilled = ((document.getElementById('expPollQuestion')?.value) || '').trim().length > 0
-  // When poll mode is on, either the composer text or the poll question can
-  // supply the question, so a filled poll question alone is enough to enable
-  // the Post button even with an empty composer.
-  dom.expPostBtn.disabled = composerEmpty && !(pollOn && pollQuestionFilled)
+  const articleOn = !!document.getElementById('expArticleToggle')?.checked
+  const articleTitleFilled = ((document.getElementById('expArticleTitle')?.value) || '').trim().length > 0
+  const articleBodyFilled = dom.expPostContent.value.trim().length > 0
+
+  // Enable rules:
+  //  - Article mode: title AND body must be filled.
+  //  - Poll mode: either composer text or poll question alone is enough.
+  //  - Default: standard composer-empty check.
+  if (articleOn) {
+    dom.expPostBtn.disabled = !(articleTitleFilled && articleBodyFilled)
+  } else if (pollOn && pollQuestionFilled) {
+    dom.expPostBtn.disabled = false
+  } else {
+    dom.expPostBtn.disabled = composerEmpty
+  }
+
   updateTagHint()
   updateMetadataWarning()
   scheduleDraftAutosave()
@@ -694,10 +771,159 @@ async function scheduleExpandedPost(refreshUI) {
 }
 
 /**
+ * Publish a long-form article from the composer.
+ *
+ * Reads title / summary / cover / body / cw / paywall fields, runs the same
+ * upload pipeline as posts for the cover image (so EXIF stripping happens),
+ * and appends a single article event. Body is markdown source — sanitized
+ * at render time, never trusted as HTML.
+ *
+ * Mutually exclusive with poll mode (a poll is its own event type). Media /
+ * file attachments from the regular composer are dropped — articles use only
+ * the cover image. CW + paywall toggles still apply.
+ */
+async function createArticleFromComposer(refreshUI) {
+  const titleInput = document.getElementById('expArticleTitle')
+  const summaryInput = document.getElementById('expArticleSummary')
+  const title = (titleInput?.value || '').trim()
+  const summary = (summaryInput?.value || '').trim()
+  const body = dom.expPostContent.value
+  if (!title) {
+    alert('Please enter an article title.')
+    return
+  }
+  if (title.length > ARTICLE_MAX_TITLE) {
+    alert(`Title must be ${ARTICLE_MAX_TITLE} characters or fewer.`)
+    return
+  }
+  if (summary.length > ARTICLE_MAX_SUMMARY) {
+    alert(`Summary must be ${ARTICLE_MAX_SUMMARY} characters or fewer.`)
+    return
+  }
+  if (!body.trim()) {
+    alert('Article body cannot be empty.')
+    return
+  }
+  if (body.length > ARTICLE_MAX_BODY) {
+    alert(`Article body must be ${ARTICLE_MAX_BODY} characters or fewer.`)
+    return
+  }
+
+  // CW
+  const cwToggle = document.getElementById('expCwToggle')
+  const cwLabelInput = document.getElementById('expCwLabel')
+  let cw = null
+  if (cwToggle?.checked) {
+    const raw = cwLabelInput?.value?.trim() || ''
+    if (!raw) {
+      alert('Please enter a content warning label, or turn the warning off.')
+      return
+    }
+    if (raw.length > MAX_CW_LENGTH) {
+      alert(`Content warning must be ${MAX_CW_LENGTH} characters or fewer.`)
+      return
+    }
+    cw = raw
+  }
+
+  // Paywall (optional)
+  const paywallToggle = document.getElementById('expPaywallToggle')
+  const isPaywalled = !!paywallToggle?.checked
+  if (isPaywalled && !wallet.isWalletUnlocked()) {
+    alert('Your wallet must be unlocked to create a paywalled article.')
+    return
+  }
+
+  // Tags from body — same hashtag extractor as posts.
+  const tags = extractHashtags(body)
+
+  dom.expPostBtn.disabled = true
+  try {
+    // Upload cover (if any) — runs through the same EXIF-stripping image
+    // pipeline as regular post media.
+    let cover = null
+    if (expPendingArticleCover && state.media) {
+      cover = await state.media.storeImage(expPendingArticleCover, expPendingArticleCover.name)
+    }
+
+    let articleEvent
+    if (isPaywalled) {
+      const priceInput = document.getElementById('expPaywallPrice')
+      const previewInput = document.getElementById('expPaywallPreview')
+      const price = priceInput?.value?.trim()
+      const preview = previewInput?.value?.trim()
+      if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
+        alert('Please enter a valid XMR price for the paywall.')
+        dom.expPostBtn.disabled = false
+        return
+      }
+      if (!preview) {
+        alert('Please enter a public preview text for the paywall.')
+        dom.expPostBtn.disabled = false
+        return
+      }
+      const paywallFields = await createPaywalledPost({
+        content: body,
+        media: [],
+        priceXmr: price,
+        preview
+      })
+      articleEvent = createArticleEvent({
+        title,
+        summary,
+        cover,
+        body: '',
+        tags,
+        cw,
+        paywall: {
+          price: paywallFields.paywallPrice,
+          preview: paywallFields.paywallPreview,
+          encrypted: paywallFields.paywallEncrypted,
+          subaddress: paywallFields.paywallSubaddress,
+          subaddressIndex: paywallFields.paywallSubaddressIndex
+        }
+      })
+      const appended = await state.feed.append(articleEvent)
+      if (appended && appended.timestamp) {
+        persistContentKey(appended.timestamp, paywallFields.contentKeyHex)
+        cacheUnlockedContent(appended.pubkey, appended.timestamp, body, [])
+      }
+    } else {
+      articleEvent = createArticleEvent({
+        title,
+        summary,
+        cover,
+        body,
+        tags,
+        cw
+      })
+      await state.feed.append(articleEvent)
+    }
+
+    schedulePublicSiteRebuild()
+    if (activeDraftId && state.drafts) state.drafts.delete(activeDraftId)
+    clearExpandedComposer()
+    hideExpandedComposer()
+    await refreshUI()
+  } catch (err) {
+    alert('Error creating article: ' + err.message)
+  }
+  dom.expPostBtn.disabled = false
+}
+
+/**
  * Create post from expanded composer
  */
 async function createExpandedPost(refreshUI) {
   const content = dom.expPostContent.value.trim()
+
+  // Article mode short-circuits the regular post path. Article events are
+  // top-level (cannot also be polls). CW + paywall toggles work alongside it.
+  const articleToggle = document.getElementById('expArticleToggle')
+  const isArticle = !!articleToggle?.checked
+  if (isArticle) {
+    return createArticleFromComposer(refreshUI)
+  }
 
   // Check poll toggle first — poll posts have their own flow and do not carry
   // media / paywall fields (the poll event is self-contained).
@@ -1224,6 +1450,125 @@ export function initComposer(refreshUI) {
   }
   if (pollAddBtn) {
     pollAddBtn.addEventListener('click', () => addPollOptionRow())
+  }
+
+  // Article toggle — mutually exclusive with poll mode (an article is its own
+  // event type, not a poll). CW + paywall toggles work alongside it.
+  const articleToggle = document.getElementById('expArticleToggle')
+  const articleFields = document.getElementById('expArticleFields')
+  const articleTitleInput = document.getElementById('expArticleTitle')
+  const articleSummaryInput = document.getElementById('expArticleSummary')
+  const articleTitleCount = document.getElementById('expArticleTitleCount')
+  const articleSummaryCount = document.getElementById('expArticleSummaryCount')
+  const articleCoverBtn = document.getElementById('expArticleCoverBtn')
+  const articleCoverInput = document.getElementById('expArticleCoverInput')
+  const articleCoverPreview = document.getElementById('expArticleCoverPreview')
+  const articlePreviewBtn = document.getElementById('expArticlePreviewBtn')
+  const articlePreviewEl = document.getElementById('expArticlePreview')
+
+  if (articleToggle && articleFields) {
+    articleToggle.addEventListener('change', () => {
+      if (articleToggle.checked) {
+        // Disable poll mode (mutually exclusive)
+        if (pollToggle?.checked) {
+          pollToggle.checked = false
+          pollFields?.classList.add('hidden')
+        }
+        articleFields.classList.remove('hidden')
+        // Grow the body textarea via a class on the expanded composer
+        dom.expandedComposer.classList.add('article-mode')
+        // Update placeholder hint
+        if (dom.expPostContent) {
+          dom.expPostContent.placeholder = 'Write the article body in Markdown. Headings, bold, italic, lists, links, and images supported.'
+        }
+        articleTitleInput?.focus()
+      } else {
+        articleFields.classList.add('hidden')
+        dom.expandedComposer.classList.remove('article-mode')
+        if (dom.expPostContent) {
+          dom.expPostContent.placeholder = "What's happening? Write something longer..."
+        }
+        // Hide preview if open
+        if (articlePreviewEl) {
+          articlePreviewEl.classList.add('hidden')
+          articlePreviewEl.innerHTML = ''
+        }
+      }
+      updateExpCharCount()
+    })
+  }
+
+  // Article + poll mutual exclusion (the other direction — poll toggle off
+  // article toggle if both somehow turned on)
+  if (pollToggle && articleToggle) {
+    pollToggle.addEventListener('change', () => {
+      if (pollToggle.checked && articleToggle.checked) {
+        articleToggle.checked = false
+        articleFields?.classList.add('hidden')
+        dom.expandedComposer.classList.remove('article-mode')
+      }
+    })
+  }
+
+  if (articleTitleInput && articleTitleCount) {
+    articleTitleInput.addEventListener('input', () => {
+      articleTitleCount.textContent = articleTitleInput.value.length
+      updateExpCharCount()
+    })
+  }
+  if (articleSummaryInput && articleSummaryCount) {
+    articleSummaryInput.addEventListener('input', () => {
+      articleSummaryCount.textContent = articleSummaryInput.value.length
+    })
+  }
+  if (articleCoverBtn && articleCoverInput) {
+    articleCoverBtn.addEventListener('click', () => articleCoverInput.click())
+  }
+  if (articleCoverInput && articleCoverPreview) {
+    articleCoverInput.addEventListener('change', (e) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      if (!file.type.startsWith('image/')) {
+        alert('Cover must be an image.')
+        return
+      }
+      expPendingArticleCover = file
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        articleCoverPreview.innerHTML = `
+          <div class="article-cover-preview-item">
+            <img src="${ev.target.result}" alt="cover preview">
+            <button type="button" class="remove-media" id="expArticleCoverRemove" title="Remove cover">&times;</button>
+          </div>
+        `
+        const removeBtn = document.getElementById('expArticleCoverRemove')
+        if (removeBtn) {
+          removeBtn.addEventListener('click', () => {
+            expPendingArticleCover = null
+            articleCoverPreview.innerHTML = ''
+            articleCoverInput.value = ''
+          })
+        }
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+  if (articlePreviewBtn && articlePreviewEl) {
+    articlePreviewBtn.addEventListener('click', () => {
+      const isHidden = articlePreviewEl.classList.contains('hidden')
+      if (isHidden) {
+        const body = dom.expPostContent.value
+        // renderArticleMarkdown is the sanitizing renderer — safe to innerHTML.
+        // PHASE 2A SANITIZER GATE — markdown.js is the only path we trust here.
+        articlePreviewEl.innerHTML = renderArticleMarkdown(body)
+        articlePreviewEl.classList.remove('hidden')
+        articlePreviewBtn.textContent = 'Hide preview'
+      } else {
+        articlePreviewEl.classList.add('hidden')
+        articlePreviewEl.innerHTML = ''
+        articlePreviewBtn.textContent = 'Preview body'
+      }
+    })
   }
 
   // Ctrl+Enter to post, Escape to cancel
