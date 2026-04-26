@@ -53,7 +53,7 @@
     <header class="topnav">
       <div class="topnav-brand">
         <img src="./logo.png" alt="Swarmnero" class="logo-img">
-        <span class="version" id="versionBadge">v0.9.9</span>
+        <span class="version" id="versionBadge">v0.10.0</span>
       </div>
       <nav class="topnav-tabs">
         <button id="feedNavBtn" class="nav-btn topnav-tab"><span class="nav-icon">🏠</span><span class="topnav-tab-label">Home</span></button>
@@ -185,6 +185,37 @@
 
             <!-- Scheduled posts list (drafts moved to File menu) -->
             <div id="expScheduledList" class="scheduled-list hidden"></div>
+            <!-- Article toggle and fields -->
+            <div class="paywall-section">
+              <label class="paywall-toggle">
+                <input type="checkbox" id="expArticleToggle">
+                <span class="paywall-toggle-label">&#128196; Long-form article</span>
+              </label>
+              <div id="expArticleFields" class="paywall-fields hidden">
+                <div class="paywall-field">
+                  <label for="expArticleTitle">Title (required)</label>
+                  <input type="text" id="expArticleTitle" maxlength="200" placeholder="A clear, specific title">
+                  <div class="cw-char-count"><span id="expArticleTitleCount">0</span> / 200</div>
+                </div>
+                <div class="paywall-field">
+                  <label for="expArticleSummary">Summary (optional, shown on the timeline card)</label>
+                  <textarea id="expArticleSummary" rows="2" maxlength="500" placeholder="One or two sentences that introduce the article"></textarea>
+                  <div class="cw-char-count"><span id="expArticleSummaryCount">0</span> / 500</div>
+                </div>
+                <div class="paywall-field">
+                  <label>Cover image (optional)</label>
+                  <button type="button" id="expArticleCoverBtn" class="btn-secondary">Choose cover image</button>
+                  <input type="file" id="expArticleCoverInput" accept="image/*" style="display: none;">
+                  <div id="expArticleCoverPreview" class="article-cover-preview"></div>
+                </div>
+                <div class="paywall-field">
+                  <button type="button" id="expArticlePreviewBtn" class="btn-secondary">Preview body</button>
+                  <span class="article-preview-hint">The body uses Markdown. The renderer escapes HTML and only allows headings, bold, italic, lists, links, and images.</span>
+                </div>
+                <div id="expArticlePreview" class="article-preview hidden"></div>
+                <p class="paywall-hint">Articles are public posts with a longer body. Markdown is rendered safely. CW and paywall toggles work alongside article mode; polls do not.</p>
+              </div>
+            </div>
             <!-- Poll toggle and fields -->
             <div class="paywall-section">
               <label class="paywall-toggle">
